@@ -556,7 +556,7 @@ class AutoGMMCluster(BaseCluster):
                 np.iinfo(np.int32).max, size=len(processed_param_grid)
             )
         else:
-            seeds = [self.random_state] * len(processed_param_grid)
+            seeds = np.array([self.random_state] * len(processed_param_grid))
 
         n = X.shape[0]
         if self.max_agglom_size is None or n <= self.max_agglom_size:
@@ -565,12 +565,16 @@ class AutoGMMCluster(BaseCluster):
             subset_idxs = np.random.choice(np.arange(0, n), self.max_agglom_size)
             X_subset = X[subset_idxs, :]
 
-        ag_labels = []
+        ag_labels: List[np.ndarray] = []
         if self.label_init is None:
             for p_ag in param_grid_ag:
                 if p_ag["affinity"] != "none":
+                    p_ag_without_affinity = p_ag.copy()
+                    affinity = p_ag_without_affinity.pop("affinity", None)
                     agg = AgglomerativeClustering(
-                        n_clusters=self.min_components, **p_ag
+                        n_clusters=self.min_components,
+                        metric=affinity,
+                        **p_ag_without_affinity,
                     )
                     agg.fit(X_subset)
                     hierarchical_labels = _hierarchical_labels(
@@ -580,6 +584,7 @@ class AutoGMMCluster(BaseCluster):
 
         def _fit_for_data(p: ParamGridType, seed: int) -> Dict[str, Any]:
             n_clusters = p[1]["n_components"]
+            agg_clustering: Union[List[int], np.ndarray]
             if (p[0]["affinity"] != "none") and (self.label_init is None):
                 index = param_grid_ag.index(p[0])
                 agg_clustering = ag_labels[index][:, n_clusters - self.min_components]
@@ -757,9 +762,10 @@ def _hierarchical_labels(
         inds = np.where(np.isin(hierarchical_labels[:, n], children[n, :]))[0]
         hierarchical_labels[inds, -1] = n_samples + n
         if n < merge_end:
-            hierarchical_labels = np.hstack(
-                (hierarchical_labels, hierarchical_labels[:, -1].reshape((-1, 1)))
-            )
+            hierarchical_labels = np.hstack((
+                hierarchical_labels,
+                hierarchical_labels[:, -1].reshape((-1, 1)),
+            ))
 
     hierarchical_labels = hierarchical_labels[:, merge_start:]
     for i in range(hierarchical_labels.shape[1]):

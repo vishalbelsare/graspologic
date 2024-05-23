@@ -113,20 +113,18 @@ class SignalSubgraph:
 
         self.__construct_contingency()
         verts = np.shape(self.graphs)[0]
-        sigmat = np.array(
-            [
-                [fisher_exact(self.contmat_[i, j, :, :])[1] for j in range(verts)]
-                for i in range(verts)
-            ]
-        )
+        sigmat = np.array([
+            [fisher_exact(self.contmat_[i, j, :, :])[1] for j in range(verts)]
+            for i in range(verts)
+        ])
 
         if isinstance(constraints, (int)):  # incoherent
             nedges = constraints
-            sigsub = np.dstack(
+            _sigsub_dstack = np.dstack(
                 np.unravel_index(np.argsort(sigmat.ravel()), np.shape(sigmat))
             )
-            sigsub = sigsub[0, :nedges, :]
-            sigsub = tuple(np.transpose(sigsub))
+            _sigsub = _sigsub_dstack[0, :nedges, :]
+            sigsub = tuple(np.transpose(_sigsub))
 
         elif len(constraints) == 2:  # coherent
             nedges = constraints[0]
@@ -156,13 +154,13 @@ class SignalSubgraph:
                     indsp = np.dstack(
                         np.unravel_index(np.argsort(blank.ravel()), np.shape(blank))
                     )
-                    sigsub = indsp[0, :nedges, :]
-                    sigsub = tuple(np.transpose(sigsub))
+                    _sigsub = indsp[0, :nedges, :]
+                    sigsub = tuple(np.transpose(_sigsub))
                     wconv = 1
                 else:
                     wcounter = wcounter + 1
                     if wcounter > len(wset):
-                        sigsub = []
+                        sigsub = tuple()
                         wconv = 1
         else:
             msg = "Input constraints must be an int for the incoherent signal-subgraph estimator, or a vector of length 2 for the coherent subgraph estimator."

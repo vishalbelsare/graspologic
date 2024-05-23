@@ -21,12 +21,13 @@ from graspologic.utils import (
 
 from . import __SVD_SOLVER_TYPES
 from ._elbow import _index_of_elbow
+from ._types import NxGraphType
 from .embeddings import Embeddings
 
 
 @beartype
 def omnibus_embedding_pairwise(
-    graphs: List[Union[nx.Graph, nx.OrderedGraph, nx.DiGraph, nx.OrderedDiGraph]],
+    graphs: List[NxGraphType],
     dimensions: int = 100,
     elbow_cut: Optional[int] = None,
     svd_solver_algorithm: SvdAlgorithmType = "randomized",
@@ -85,7 +86,7 @@ def omnibus_embedding_pairwise(
                   :func:`sklearn.utils.extmath.randomized_svd`
               - 'full'
                   Computes full svd using :func:`scipy.linalg.svd`
-                  Does not support ``graph`` input of type scipy.sparse.csr_matrix
+                  Does not support ``graph`` input of type scipy.sparse.csr_array
               - 'truncated'
                   Computes truncated svd using :func:`scipy.sparse.linalg.svds`
     svd_solver_iterations : int (default=5)
@@ -107,7 +108,7 @@ def omnibus_embedding_pairwise(
 
     Raises
     ------
-    beartype.roar.BeartypeCallHintPepParamException if parameters do not match type hints
+    beartype.roar.BeartypeCallHintParamViolation if parameters do not match type hints
     ValueError if values are not within appropriate ranges or allowed values
 
     See Also
@@ -150,7 +151,7 @@ def omnibus_embedding_pairwise(
     check_argument(svd_solver_iterations >= 1, "svd_solver_iterations must be positive")
 
     check_argument(
-        svd_seed is None or 0 <= svd_seed <= 2 ** 32 - 1,
+        svd_seed is None or 0 <= svd_seed <= 2**32 - 1,
         "svd_seed must be a nonnegative, 32-bit integer",
     )
 
@@ -164,9 +165,9 @@ def omnibus_embedding_pairwise(
     for graph in graphs[1:]:
         union_graph.add_edges_from(graph.edges())
 
-    union_graph_lcc: Union[
-        nx.Graph, nx.Digraph, nx.OrderedGraph, nx.OrderedDiGraph
-    ] = largest_connected_component(union_graph)
+    union_graph_lcc: Union[nx.Graph, nx.Digraph, nx.OrderedGraph, nx.OrderedDiGraph] = (
+        largest_connected_component(union_graph)
+    )
     union_graph_lcc_nodes: Set[Any] = set(list(union_graph_lcc.nodes()))
 
     union_node_ids = np.array(list(union_graph_lcc_nodes))
@@ -219,18 +220,16 @@ def omnibus_embedding_pairwise(
             elbow_cut, graph.is_directed(), model.singular_values_, current_embedding
         )
 
-        graph_embeddings.append(
-            (
-                Embeddings(union_node_ids, previous_embedding_cut),
-                Embeddings(union_node_ids, current_embedding_cut),
-            )
-        )
+        graph_embeddings.append((
+            Embeddings(union_node_ids, previous_embedding_cut),
+            Embeddings(union_node_ids, current_embedding_cut),
+        ))
 
     return graph_embeddings
 
 
 def _graphs_precondition_checks(
-    graphs: List[Union[nx.Graph, nx.OrderedGraph, nx.DiGraph, nx.OrderedDiGraph]],
+    graphs: List[NxGraphType],
     weight_attribute: str,
 ) -> Optional[str]:
     is_directed = graphs[0].is_directed()
@@ -259,7 +258,7 @@ def _graphs_precondition_checks(
             )
             used_weight_attribute = None  # this supercedes what the user said, because
             # not all of the weights are real numbers, if they exist at all
-            # this weight=1.0 treatment actually happens in nx.to_scipy_sparse_matrix()
+            # this weight=1.0 treatment actually happens in nx.to_scipy_sparse_array()
 
     return used_weight_attribute
 
@@ -291,12 +290,12 @@ def _elbow_cut_if_needed(
 
 
 def _augment_graph(
-    graph: Union[nx.Graph, nx.OrderedGraph, nx.DiGraph, nx.OrderedDiGraph],
+    graph: NxGraphType,
     node_ids: Set[Hashable],
     weight_attribute: Optional[str],
     perform_augment_diagonal: bool = True,
 ) -> np.ndarray:
-    graph_sparse = nx.to_scipy_sparse_matrix(
+    graph_sparse = nx.to_scipy_sparse_array(
         graph, weight=weight_attribute, nodelist=node_ids
     )
 
@@ -311,7 +310,7 @@ def _augment_graph(
 
 
 def _sync_nodes(
-    graph_to_reduce: Union[nx.Graph, nx.OrderedGraph, nx.DiGraph, nx.OrderedDiGraph],
+    graph_to_reduce: NxGraphType,
     set_of_valid_nodes: Set[Hashable],
 ) -> None:
     to_remove = []

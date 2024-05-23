@@ -122,7 +122,6 @@ class DivisiveCluster(NodeMixin, BaseEstimator):
         max_level: int = 4,
         delta_criter: float = 0,
     ):
-
         _check_common_inputs(min_components, max_components, cluster_kws)
 
         if cluster_method not in ["gmm", "kmeans"]:
@@ -215,7 +214,7 @@ class DivisiveCluster(NodeMixin, BaseEstimator):
             cluster = AutoGMMCluster(
                 min_components=min_components,
                 max_components=self.max_components,
-                **self.cluster_kws
+                **self.cluster_kws,
             )
             cluster.fit(X)
             model = cluster.model_
@@ -276,9 +275,10 @@ class DivisiveCluster(NodeMixin, BaseEstimator):
                 ):
                     child_labels = dc._fit(new_X)
                     while labels.shape[1] <= child_labels.shape[1]:
-                        labels = np.column_stack(
-                            (labels, np.zeros((len(X), 1), dtype=int))
-                        )
+                        labels = np.column_stack((
+                            labels,
+                            np.zeros((len(X), 1), dtype=int),
+                        ))
                     labels[inds, 1 : child_labels.shape[1] + 1] = child_labels
                 else:
                     # make a "GaussianMixture" model for clusters

@@ -1,17 +1,18 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.utils import check_array
 from typing_extensions import Literal
 
-from graspologic.types import Tuple
-
 from ..utils import is_symmetric
 from .svd import SvdAlgorithmType, select_svd
+
+if TYPE_CHECKING:
+    from graspologic.types import Tuple
 
 
 def _get_centering_matrix(n: int) -> np.ndarray:
@@ -197,7 +198,7 @@ class ClassicalMDS(BaseEstimator):
             dissimilarity_matrix = self._compute_euclidean_distances(X=X)
 
         J = _get_centering_matrix(dissimilarity_matrix.shape[0])
-        B = J @ (dissimilarity_matrix ** 2) @ J * -0.5
+        B = J @ (dissimilarity_matrix**2) @ J * -0.5
 
         n_components = self.n_components
 
@@ -216,7 +217,7 @@ class ClassicalMDS(BaseEstimator):
 
         self.n_components_ = len(D)
         self.components_ = U
-        self.singular_values_ = D ** 0.5
+        self.singular_values_ = D**0.5
         self.dissimilarity_matrix_ = dissimilarity_matrix
         self.n_features_in_ = X.shape[1]
 

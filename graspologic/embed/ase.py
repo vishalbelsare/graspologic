@@ -40,7 +40,7 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
             :func:`sklearn.utils.extmath.randomized_svd`
         - 'full'
             Computes full svd using :func:`scipy.linalg.svd`
-            Does not support ``graph`` input of type scipy.sparse.csr_matrix
+            Does not support ``graph`` input of type scipy.sparse.csr_array
         - 'truncated'
             Computes truncated svd using :func:`scipy.sparse.linalg.svds`
 
@@ -68,7 +68,6 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
     svd_seed : int or None (default ``None``)
         Only applicable for ``algorithm="randomized"``; allows you to seed the
         randomized svd solver for deterministic, albeit pseudo-randomized behavior.
-
 
 
     Attributes
@@ -143,14 +142,14 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
         graph: GraphRepresentation,
         y: Optional[Any] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "AdjacencySpectralEmbed":
         """
         Fit ASE model to input graph
 
         Parameters
         ----------
-        graph : array-like, scipy.sparse.csr_matrix, or networkx.Graph
+        graph : array-like, scipy.sparse.csr_array, or networkx.Graph
             Input graph to embed.
 
         y: Ignored

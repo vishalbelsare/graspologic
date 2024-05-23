@@ -7,11 +7,11 @@ import numpy as np
 import scipy
 import scipy.sparse as sp
 import sklearn
+from scipy.sparse import csr_array
 from scipy.stats import norm
 from typing_extensions import Literal
 
 from graspologic.types import List, Tuple
-from graspologic.utils import is_almost_symmetric
 
 SvdAlgorithmType = Literal["full", "truncated", "randomized", "eigsh"]
 
@@ -44,7 +44,7 @@ def _compute_likelihood(arr: np.ndarray) -> np.ndarray:
             mu2 = -np.inf
 
         # compute pooled variance
-        variance = ((np.sum((s1 - mu1) ** 2) + np.sum((s2 - mu2) ** 2))) / (
+        variance = (np.sum((s1 - mu1) ** 2) + np.sum((s2 - mu2) ** 2)) / (
             n_elements - 1 - (idx < n_elements)
         )
         std = np.sqrt(variance)
@@ -58,7 +58,7 @@ def _compute_likelihood(arr: np.ndarray) -> np.ndarray:
 
 
 def select_dimension(
-    X: Union[np.ndarray, sp.csr_matrix],
+    X: Union[np.ndarray, sp.csr_array],
     n_components: Optional[int] = None,
     n_elbows: int = 2,
     threshold: Optional[float] = None,
@@ -107,8 +107,8 @@ def select_dimension(
         pp.918-930.
     """
     # Handle input data
-    if not isinstance(X, np.ndarray) and not sp.isspmatrix_csr(X):
-        msg = "X must be a numpy array or scipy.sparse.csr_matrix, not {}.".format(
+    if not isinstance(X, (np.ndarray, csr_array)):
+        msg = "X must be a numpy array or scipy.sparse.csr_array, not {}.".format(
             type(X)
         )
         raise ValueError(msg)
@@ -185,7 +185,7 @@ def select_dimension(
 
 
 def select_svd(
-    X: Union[np.ndarray, sp.csr_matrix],
+    X: Union[np.ndarray, sp.csr_array],
     n_components: Optional[int] = None,
     n_elbows: Optional[int] = 2,
     algorithm: SvdAlgorithmType = "randomized",
@@ -223,7 +223,7 @@ def select_svd(
             :func:`sklearn.utils.extmath.randomized_svd`
         - 'full'
             Computes full svd using :func:`scipy.linalg.svd`
-            Does not support ``graph`` input of type scipy.sparse.csr_matrix
+            Does not support ``graph`` input of type scipy.sparse.csr_array
         - 'truncated'
             Computes truncated svd using :func:`scipy.sparse.linalg.svds`
         - 'eigsh'
@@ -266,7 +266,7 @@ def select_svd(
         raise ValueError(msg)
 
     if algorithm == "full" and sp.isspmatrix_csr(X):
-        msg = "'full' agorithm does not support scipy.sparse.csr_matrix inputs."
+        msg = "'full' agorithm does not support scipy.sparse.csr_array inputs."
         raise TypeError(msg)
 
     if n_components is None:

@@ -148,7 +148,7 @@ class LaplacianSpectralEmbed(BaseSpectralEmbed):
         graph: GraphRepresentation,
         y: Optional[Any] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "LaplacianSpectralEmbed":
         """
         Fit LSE model to input graph
@@ -159,7 +159,7 @@ class LaplacianSpectralEmbed(BaseSpectralEmbed):
 
         Parameters
         ----------
-        graph : array-like, scipy.sparse.csr_matrix, or networkx.Graph
+        graph : array-like, scipy.sparse.csr_array, or networkx.Graph
             Input graph to embed. see graspologic.utils.import_graph
 
         Returns

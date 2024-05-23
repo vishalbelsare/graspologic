@@ -88,7 +88,7 @@ def latent_position_test(
         Supply -1 to use all cores available.
 
     Returns
-    ----------
+    -------
     stat : float
         The observed difference between the embedded positions of the two input graphs
         after an alignment (the type of alignment depends on ``test_case``)
@@ -124,9 +124,9 @@ def latent_position_test(
     if type(embedding) is not str:
         raise TypeError("embedding must be str")
     if type(n_bootstraps) is not int:
-        raise TypeError()
+        raise TypeError
     if type(test_case) is not str:
-        raise TypeError()
+        raise TypeError
     if n_bootstraps < 1:
         raise ValueError(
             "{} is invalid number of bootstraps, must be greater than 1".format(
@@ -148,7 +148,7 @@ def latent_position_test(
     A1 = import_graph(A1)
     A2 = import_graph(A2)
     if not is_symmetric(A1) or not is_symmetric(A2):
-        raise NotImplementedError()  # TODO asymmetric case
+        raise NotImplementedError  # TODO asymmetric case
     if A1.shape != A2.shape:
         raise ValueError("Input matrices do not have matching dimensions")
     num_components: int
@@ -232,15 +232,15 @@ def _difference_norm(
             X1 = X1 / np.linalg.norm(X1, ord="fro")
             X2 = X2 / np.linalg.norm(X2, ord="fro")
         elif test_case == "diagonal-rotation":
-            normX1 = np.sum(X1 ** 2, axis=1)
-            normX2 = np.sum(X2 ** 2, axis=1)
+            normX1 = np.sum(X1**2, axis=1)
+            normX2 = np.sum(X2**2, axis=1)
             normX1[normX1 <= 1e-15] = 1
             normX2[normX2 <= 1e-15] = 1
             X1 = X1 / np.sqrt(normX1[:, None])
             X2 = X2 / np.sqrt(normX2[:, None])
         aligner = OrthogonalProcrustes()
         X1 = aligner.fit_transform(X1, X2)
-    return np.linalg.norm(X1 - X2)
+    return float(np.linalg.norm(X1 - X2))
 
 
 def _embed(

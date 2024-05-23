@@ -15,7 +15,12 @@
 import os
 import sys
 
-sys.path.append(os.path.abspath('./sphinx-ext/'))
+# Use RTD Theme
+import sphinx_rtd_theme
+
+import graspologic
+
+sys.path.append(os.path.abspath("./sphinx-ext/"))
 sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
@@ -28,7 +33,6 @@ realpath = os.path.realpath(__file__)
 dir_realpath = os.path.dirname(realpath)
 sys.path.append(dir_realpath)
 
-import graspologic
 
 version = graspologic.__version__
 # Append "dev" and the github run to the version when on the dev branch
@@ -63,28 +67,44 @@ autosummary_generate = True
 
 # -- sphinx.ext.autodoc
 autoclass_content = "both"
-autodoc_default_flags = ["members", "inherited-members"]
-autodoc_member_order = "bysource"  # default is alphabetical
+autodoc_default_options = {
+    "members": True,
+    "inherited-members": True,
+    "member-order": "bysource",
+    "special-members": "__init__",
+    "undoc-members": True,
+}
+autodoc_class_signature = "separated"
+autodoc_typehints = "description"
 
 # -- sphinx.ext.intersphinx
 intersphinx_mapping = {
     "anytree": ("https://anytree.readthedocs.io/en/latest/", None),
     "hyppo": ("https://hyppo.neurodata.io", None),
     "joblib": ("https://joblib.readthedocs.io/en/latest/", None),
-    "matplotlib": ("https://matplotlib.org", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "networkx": ("https://networkx.org/documentation/stable", None),
-    "numpy": ("https://numpy.org/doc/stable", None),
+    "numpy": ("https://matplotlib.org/stable/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable", None),
     "python": ("https://docs.python.org/3.9", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy", None),
     "seaborn": ("https://seaborn.pydata.org", None),
     "sklearn": ("https://scikit-learn.org/dev", None),
+    "statsmodels": ("https://www.statsmodels.org/stable", None),
 }
+
+intersphinx_disabled_reftypes = []
 
 # -- sphinx options ----------------------------------------------------------
 source_suffix = ".rst"
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints", "tutorials"]
-toc_filter_exclude = ['tutorials/index']
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "**.ipynb_checkpoints",
+    "tutorials",
+]
+toc_filter_exclude = ["tutorials/index"]
 master_doc = "index"
 source_encoding = "utf-8"
 if tags.has("build_tutorials"):
@@ -100,9 +120,6 @@ modindex_common_prefix = ["graspologic."]
 
 pygments_style = "sphinx"
 smartquotes = False
-
-# Use RTD Theme
-import sphinx_rtd_theme
 
 html_theme = "sphinx_rtd_theme"
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]

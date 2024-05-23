@@ -172,18 +172,14 @@ class MultipleASE(BaseEmbedMulti):
             Vs = np.hstack([V.T[:, :best_dimension] for V in Vs])
         else:
             # Equivalent to ASE
-            Us = np.hstack(
-                [
-                    U[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
-                    for U, D in zip(Us, Ds)
-                ]
-            )
-            Vs = np.hstack(
-                [
-                    V.T[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
-                    for V, D in zip(Vs, Ds)
-                ]
-            )
+            Us = np.hstack([
+                U[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
+                for U, D in zip(Us, Ds)
+            ])
+            Vs = np.hstack([
+                V.T[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
+                for V, D in zip(Vs, Ds)
+            ])
 
         # Second SVD for vertices
         # The notation is slightly different than the paper
@@ -212,9 +208,9 @@ class MultipleASE(BaseEmbedMulti):
 
         Parameters
         ----------
-        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_matrix
+        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_array
             If list of nx.Graph, each Graph must contain same number of nodes.
-            If list of ndarray or csr_matrix, each array must have shape (n_vertices, n_vertices).
+            If list of ndarray or csr_array, each array must have shape (n_vertices, n_vertices).
             If ndarray, then array must have shape (n_graphs, n_vertices, n_vertices).
 
         Returns
@@ -252,9 +248,9 @@ class MultipleASE(BaseEmbedMulti):
 
         Parameters
         ----------
-        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_matrix
+        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_array
             If list of nx.Graph, each Graph must contain same number of nodes.
-            If list of ndarray or csr_matrix, each array must have shape (n_vertices, n_vertices).
+            If list of ndarray or csr_array, each array must have shape (n_vertices, n_vertices).
             If ndarray, then array must have shape (n_graphs, n_vertices, n_vertices).
 
         Returns

@@ -29,14 +29,12 @@ class TestSVD(unittest.TestCase):
 
     def test_outputs(self):
         np.random.seed(123)
-        X = np.vstack(
-            [
-                np.repeat([[0.2, 0.2, 0.2]], 50, axis=0),
-                np.repeat([[0.5, 0.5, 0.5]], 50, axis=0),
-            ]
-        )
+        X = np.vstack([
+            np.repeat([[0.2, 0.2, 0.2]], 50, axis=0),
+            np.repeat([[0.5, 0.5, 0.5]], 50, axis=0),
+        ])
         P = X @ X.T
-        A = np.random.binomial(1, P).astype(np.float)
+        A = np.random.binomial(1, P).astype(float)
 
         n_components = 3
 
@@ -68,14 +66,12 @@ class TestSVD(unittest.TestCase):
 
     def test_eigsh(self):
         np.random.seed(123)
-        X = np.vstack(
-            [
-                np.repeat([[0.2, 0.2, 0.2]], 50, axis=0),
-                np.repeat([[0.5, 0.5, 0.5]], 50, axis=0),
-            ]
-        )
+        X = np.vstack([
+            np.repeat([[0.2, 0.2, 0.2]], 50, axis=0),
+            np.repeat([[0.5, 0.5, 0.5]], 50, axis=0),
+        ])
         P = X @ X.T
-        A = np.random.binomial(1, P).astype(np.float)
+        A = np.random.binomial(1, P).astype(float)
         A = symmetrize(A, method="triu")
         n_components = 3
 

@@ -8,7 +8,7 @@ import networkx as nx
 import numpy as np
 import pytest
 import scipy
-from beartype.roar import BeartypeCallHintPepParamException
+from beartype.roar import BeartypeCallHintParamViolation
 
 from graspologic.partition import (
     HierarchicalCluster,
@@ -35,19 +35,16 @@ class TestHierarchicalCluster(unittest.TestCase):
         # test from_native indirectly through calling graspologic.partition.hierarchical_leiden()
 
     def test_final_hierarchical_clustering(self):
-
-        hierarchical_clusters = HierarchicalClusters(
-            [
-                HierarchicalCluster("1", 0, None, 0, False),
-                HierarchicalCluster("2", 0, None, 0, False),
-                HierarchicalCluster("3", 0, None, 0, False),
-                HierarchicalCluster("4", 1, None, 0, True),
-                HierarchicalCluster("5", 1, None, 0, True),
-                HierarchicalCluster("1", 2, 0, 1, True),
-                HierarchicalCluster("2", 2, 0, 1, True),
-                HierarchicalCluster("3", 3, 0, 1, True),
-            ]
-        )
+        hierarchical_clusters = HierarchicalClusters([
+            HierarchicalCluster("1", 0, None, 0, False),
+            HierarchicalCluster("2", 0, None, 0, False),
+            HierarchicalCluster("3", 0, None, 0, False),
+            HierarchicalCluster("4", 1, None, 0, True),
+            HierarchicalCluster("5", 1, None, 0, True),
+            HierarchicalCluster("1", 2, 0, 1, True),
+            HierarchicalCluster("2", 2, 0, 1, True),
+            HierarchicalCluster("3", 3, 0, 1, True),
+        ])
 
         expected = {
             "1": 2,
@@ -91,7 +88,7 @@ class TestLeiden(unittest.TestCase):
         graph.add_edge("2", "3", weight=4.0)
 
         leiden(graph=graph, **good_args)
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["starting_communities"] = 123
             leiden(graph=graph, **args)
@@ -100,7 +97,7 @@ class TestLeiden(unittest.TestCase):
         args["starting_communities"] = None
         leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["extra_forced_iterations"] = 1234.003
             leiden(graph=graph, **args)
@@ -110,7 +107,7 @@ class TestLeiden(unittest.TestCase):
             args["extra_forced_iterations"] = -4003
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["resolution"] = "leiden"
             leiden(graph=graph, **args)
@@ -120,7 +117,7 @@ class TestLeiden(unittest.TestCase):
             args["resolution"] = 0
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["randomness"] = "leiden"
             leiden(graph=graph, **args)
@@ -130,12 +127,12 @@ class TestLeiden(unittest.TestCase):
             args["randomness"] = 0
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["use_modularity"] = 1234
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["trials"] = "hotdog"
             leiden(graph=graph, **args)
@@ -151,7 +148,7 @@ class TestLeiden(unittest.TestCase):
         args["random_seed"] = None
         leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["random_seed"] = "leiden"
             leiden(graph=graph, **args)
@@ -161,23 +158,23 @@ class TestLeiden(unittest.TestCase):
             args["random_seed"] = -1
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["is_weighted"] = "leiden"
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["weight_default"] = "leiden"
             leiden(graph=graph, **args)
 
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["check_directed"] = "leiden"
             leiden(graph=graph, **args)
 
         # one extra parameter hierarchical needs
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             args = good_args.copy()
             args["max_cluster_size"] = "leiden"
             hierarchical_leiden(graph=graph, **args)
@@ -189,13 +186,15 @@ class TestLeiden(unittest.TestCase):
 
         cleared_partitions = good_args.copy()
         del cleared_partitions["starting_communities"]
-        as_csr = nx.to_scipy_sparse_matrix(graph)
+        as_csr = nx.to_scipy_sparse_array(graph)
         partitions = leiden(graph=as_csr, **cleared_partitions)
         node_ids = partitions.keys()
         for node_id in node_ids:
             self.assertTrue(
-                isinstance(node_id, (np.int32, np.intc)),
-                f"{node_id} has {type(node_id)} should be an np.int32/np.intc",
+                isinstance(
+                    node_id, np.integer
+                ),  # this is the preferred numpy typecheck
+                f"{node_id} has {type(node_id)} should be an int",
             )
 
     def test_hierarchical(self):
@@ -309,8 +308,8 @@ class TestLeidenIsolates(unittest.TestCase):
 
         self.assert_isolate_not_in_hierarchical_result(hierarchical_partitions)
 
-    def test_isolate_nodes_in_csr_matrix_are_not_returned(self):
-        sparse_adj_matrix = nx.to_scipy_sparse_matrix(self.graph)
+    def test_isolate_nodes_in_csr_array_are_not_returned(self):
+        sparse_adj_matrix = nx.to_scipy_sparse_array(self.graph)
 
         self.assertEqual(
             10,
@@ -349,7 +348,7 @@ class TestValidEdgeList(unittest.TestCase):
 
     def test_assert_list_does_not_contain_tuples(self):
         edges = ["invalid"]
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             _edge_list_to_edge_list(
                 edges=edges,
                 identifier=_IdentityMapper(),
@@ -357,7 +356,7 @@ class TestValidEdgeList(unittest.TestCase):
 
     def test_assert_list_contains_misshapen_tuple(self):
         edges = [(1, 2, 1.0, 1.0)]
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             _edge_list_to_edge_list(
                 edges=edges,
                 identifier=_IdentityMapper(),
@@ -365,7 +364,7 @@ class TestValidEdgeList(unittest.TestCase):
 
     def test_assert_wrong_types_in_tuples(self):
         edges = [(True, 4, "sandwich")]
-        with self.assertRaises(BeartypeCallHintPepParamException):
+        with self.assertRaises(BeartypeCallHintParamViolation):
             _edge_list_to_edge_list(
                 edges=edges,
                 identifier=_IdentityMapper(),
@@ -475,8 +474,8 @@ class TestValidEdgeList(unittest.TestCase):
         dense_undirected = nx.to_numpy_array(graph)
         dense_directed = nx.to_numpy_array(di_graph)
 
-        sparse_undirected = nx.to_scipy_sparse_matrix(graph)
-        sparse_directed = nx.to_scipy_sparse_matrix(di_graph)
+        sparse_undirected = nx.to_scipy_sparse_array(graph)
+        sparse_directed = nx.to_scipy_sparse_array(di_graph)
 
         expected = [("0", "1", 2.2), ("1", "2", 0.001)]
         _, edges = _adjacency_matrix_to_edge_list(
@@ -525,7 +524,7 @@ class TestValidEdgeList(unittest.TestCase):
                 weight_default=1.0,
             )
 
-        sparse = scipy.sparse.csr_matrix([])
+        sparse = scipy.sparse.csr_array([])
         with self.assertRaises(ValueError):
             _adjacency_matrix_to_edge_list(
                 matrix=sparse,
@@ -547,7 +546,7 @@ class TestValidEdgeList(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             _adjacency_matrix_to_edge_list(
-                matrix=scipy.sparse.csr_matrix(data),
+                matrix=scipy.sparse.csr_array(data),
                 identifier=_IdentityMapper(),
                 check_directed=True,
                 is_weighted=True,
