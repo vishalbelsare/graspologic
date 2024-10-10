@@ -1,17 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import atexit
-from itertools import cycle
 import json
 import math
-import numpy as np
 import os
+from itertools import cycle
 from pathlib import Path
-import pkg_resources
-from sklearn.preprocessing import minmax_scale
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
+import numpy as np
+from sklearn.preprocessing import minmax_scale
+
+from graspologic.types import Dict, Tuple
 
 __all__ = ["categorical_colors", "sequential_colors"]
 
@@ -20,14 +20,13 @@ def _load_thematic_json(path: Optional[str]) -> Tuple[Dict[Any, Any], Dict[Any, 
     if path is not None and Path(path).is_file():
         colors_path = path
     else:
-        atexit.register(pkg_resources.cleanup_resources)
-        include_path = pkg_resources.resource_filename(__package__, "include")
-        colors_path = os.path.join(include_path, "colors-100.json")
+        dir = os.path.dirname(__file__)
+        colors_path = os.path.join(dir, "include", "colors-100.json")
 
     with open(colors_path) as thematic_json_io:
         thematic_json = json.load(thematic_json_io)
-    light = thematic_json["light"]
-    dark = thematic_json["dark"]
+    light: Dict[Any, Any] = thematic_json["light"]
+    dark: Dict[Any, Any] = thematic_json["dark"]
     return light, dark
 
 
@@ -35,12 +34,12 @@ _CACHED_LIGHT, _CACHED_DARK = _load_thematic_json(None)
 
 
 def _get_colors(light_background: bool, theme_path: Optional[str]) -> Dict[Any, Any]:
-    (
-        light,
-        dark,
-    ) = _CACHED_LIGHT, _CACHED_DARK if theme_path is None else _load_thematic_json(
-        theme_path
-    )
+    light = _CACHED_LIGHT
+    dark = _CACHED_DARK
+
+    if theme_path is not None:
+        light, dark = _load_thematic_json(theme_path)
+
     return light if light_background else dark
 
 
@@ -85,7 +84,7 @@ def categorical_colors(
 
     """
     color_scheme = _get_colors(light_background, theme_path)
-    partition_populations = {}
+    partition_populations: Dict[Any, int] = {}
     for node_id, partition in partitions.items():
         count = partition_populations.get(partition, 0) + 1
         partition_populations[partition] = count
@@ -154,10 +153,14 @@ def sequential_colors(
     color_list = color_scheme["sequential"]
     num_colors = len(color_list)
 
-    keys, values = zip(*node_and_value.items())
+    keys = []
+    values = []
+    for k, v in node_and_value.items():
+        keys.append(k)
+        values.append(v)
 
     if use_log_scale:
-        values = map(math.log, values)
+        values = [math.log(v) for v in values]
 
     np_values = np.array(values).reshape(1, -1)
     new_values = minmax_scale(np_values, feature_range=(0, num_colors - 1), axis=1)

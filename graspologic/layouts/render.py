@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-import networkx as nx
-from typing import Any, Dict, List, Optional, Tuple
-from graspologic.layouts.classes import NodePosition
+from typing import Any
+
 import matplotlib.pyplot as plt
+import networkx as nx
+
+from graspologic.layouts.classes import NodePosition
+from graspologic.types import Dict, List, Tuple
 
 
 def _calculate_x_y_domain(
@@ -50,21 +53,19 @@ def _scale_node_sizes_for_rendering(
     spatial_domain: Tuple[float, float],
     spatial_range: Tuple[float, float],
     dpi: float,
-):
-    """scale the size again to match the rendered pixel range
+) -> List[float]:
+    """
+    Scale the size again to match the rendered pixel range
     we would expect this to be handled by the underlying viz framework, but it isn't, size is specified
     as the bounding box in points of the rendered output, so we need to transform our size to match.
 
     There are 72 points per inch. Multiplying by 72 / dpi converts from pixels to points.
     """
     spatial_domain = (0, spatial_domain[1] - spatial_domain[0])
-    return list(
-        map(
-            lambda s: _scale_value(spatial_domain, spatial_range, s * 2 * 72.0 / dpi)
-            ** 2,
-            sizes,
-        )
-    )
+    return [
+        _scale_value(spatial_domain, spatial_range, s * 2 * 72.0 / dpi) ** 2
+        for s in sizes
+    ]
 
 
 def _draw_graph(
@@ -80,7 +81,7 @@ def _draw_graph(
     vertex_shape: str = "o",
     arrows: bool = False,
     dpi: int = 100,
-):
+) -> None:
     if len(positions) != len(graph.nodes()):
         raise ValueError(
             f"The number of positions provided {len(positions)} is not the same as the "
@@ -126,9 +127,9 @@ def _draw_graph(
     for source, target in graph.edges():
         edge_color_list.append(node_colors[source])
 
-    ax.set_xbound(x_domain)
+    ax.set_xbound(*x_domain)
     ax.set_xlim(x_domain)
-    ax.set_ybound(y_domain)
+    ax.set_ybound(*y_domain)
     ax.set_ylim(y_domain)
 
     nx.draw_networkx_edges(
@@ -168,7 +169,7 @@ def show_graph(
     vertex_shape: str = "o",
     arrows: bool = False,
     dpi: int = 500,
-):
+) -> None:
     """
     Renders and displays a graph.
 
@@ -249,7 +250,7 @@ def save_graph(
     vertex_shape: str = "o",
     arrows: bool = False,
     dpi: int = 100,
-):
+) -> None:
     """
     Renders a graph to file.
 

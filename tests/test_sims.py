@@ -2,16 +2,12 @@
 # Licensed under the MIT License.
 
 import unittest
-import graspologic as gs
+
 import numpy as np
-import networkx as nx
+import pytest
+
 from graspologic.simulations import *
-from graspologic.utils.utils import (
-    is_symmetric,
-    is_loopless,
-    symmetrize,
-    cartesian_product,
-)
+from graspologic.utils.utils import is_loopless, is_symmetric, symmetrize
 
 
 def remove_diagonal(A):
@@ -24,7 +20,7 @@ def remove_diagonal(A):
     return A[dind]
 
 
-class Test_ER(unittest.TestCase):
+class TestER(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.n = 20
@@ -48,7 +44,7 @@ class Test_ER(unittest.TestCase):
         self.assertTrue(A.shape == (self.n, self.n))
 
 
-class Test_ZINM(unittest.TestCase):
+class TestZINM(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.n = 20
@@ -192,7 +188,7 @@ class Test_ZINM(unittest.TestCase):
             er_nm(self.n, m)
 
 
-class Test_ZINP(unittest.TestCase):
+class TestZINP(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.n = 50
@@ -350,7 +346,7 @@ class Test_ZINP(unittest.TestCase):
             er_np(self.n, self.p, dc=dc)
 
 
-class Test_WSBM(unittest.TestCase):
+class TestWSBM(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # 120 vertex graph w one community having 50 and another
@@ -443,21 +439,18 @@ class Test_WSBM(unittest.TestCase):
 
     def test_sbm_multiwt_directed_loopless(self):
         np.random.seed(12345)
-        Wt = np.vstack(
-            (
-                [np.random.normal, np.random.poisson],
-                [np.random.exponential, np.random.uniform],
-            )
-        )
-        Wtargs = np.vstack(
-            (
-                [{"loc": 2, "scale": 2}, {"lam": 5}],
-                [{"scale": 2}, {"low": 5, "high": 10}],
-            )
-        )
-        check = np.vstack(
-            ([self.exp_normal, self.exp_poisson], [self.exp_exp, self.exp_unif])
-        )
+        Wt = np.vstack((
+            [np.random.normal, np.random.poisson],
+            [np.random.exponential, np.random.uniform],
+        ))
+        Wtargs = np.vstack((
+            [{"loc": 2, "scale": 2}, {"lam": 5}],
+            [{"scale": 2}, {"low": 5, "high": 10}],
+        ))
+        check = np.vstack((
+            [self.exp_normal, self.exp_poisson],
+            [self.exp_exp, self.exp_unif],
+        ))
         A = sbm(self.n, self.Psy, wt=Wt, directed=True, wtargs=Wtargs)
         for i in range(0, len(self.n)):
             for j in range(0, len(self.n)):
@@ -484,18 +477,18 @@ class Test_WSBM(unittest.TestCase):
 
     def test_sbm_multiwt_undirected_loopless(self):
         np.random.seed(12345)
-        Wt = np.vstack(
-            (
-                [np.random.normal, np.random.poisson],
-                [np.random.poisson, np.random.uniform],
-            )
-        )
-        Wtargs = np.vstack(
-            ([{"loc": 2, "scale": 2}, {"lam": 5}], [{"lam": 5}, {"low": 5, "high": 10}])
-        )
-        check = np.vstack(
-            ([self.exp_normal, self.exp_poisson], [self.exp_poisson, self.exp_unif])
-        )
+        Wt = np.vstack((
+            [np.random.normal, np.random.poisson],
+            [np.random.poisson, np.random.uniform],
+        ))
+        Wtargs = np.vstack((
+            [{"loc": 2, "scale": 2}, {"lam": 5}],
+            [{"lam": 5}, {"low": 5, "high": 10}],
+        ))
+        check = np.vstack((
+            [self.exp_normal, self.exp_poisson],
+            [self.exp_poisson, self.exp_unif],
+        ))
         A = sbm(self.n, self.Psy, wt=Wt, directed=False, wtargs=Wtargs)
         for i in range(0, len(self.n)):
             for j in range(0, len(self.n)):
@@ -522,21 +515,18 @@ class Test_WSBM(unittest.TestCase):
 
     def test_sbm_multiwt_directed_loopy(self):
         np.random.seed(12345)
-        Wt = np.vstack(
-            (
-                [np.random.normal, np.random.poisson],
-                [np.random.exponential, np.random.uniform],
-            )
-        )
-        Wtargs = np.vstack(
-            (
-                [{"loc": 2, "scale": 2}, {"lam": 5}],
-                [{"scale": 2}, {"low": 5, "high": 10}],
-            )
-        )
-        check = np.vstack(
-            ([self.exp_normal, self.exp_poisson], [self.exp_exp, self.exp_unif])
-        )
+        Wt = np.vstack((
+            [np.random.normal, np.random.poisson],
+            [np.random.exponential, np.random.uniform],
+        ))
+        Wtargs = np.vstack((
+            [{"loc": 2, "scale": 2}, {"lam": 5}],
+            [{"scale": 2}, {"low": 5, "high": 10}],
+        ))
+        check = np.vstack((
+            [self.exp_normal, self.exp_poisson],
+            [self.exp_exp, self.exp_unif],
+        ))
         A = sbm(self.n, self.Psy, wt=Wt, directed=True, loops=True, wtargs=Wtargs)
         for i in range(0, len(self.n)):
             for j in range(0, len(self.n)):
@@ -561,18 +551,18 @@ class Test_WSBM(unittest.TestCase):
 
     def test_sbm_multiwt_undirected_loopy(self):
         np.random.seed(12345)
-        Wt = np.vstack(
-            (
-                [np.random.normal, np.random.poisson],
-                [np.random.poisson, np.random.uniform],
-            )
-        )
-        Wtargs = np.vstack(
-            ([{"loc": 2, "scale": 2}, {"lam": 5}], [{"lam": 5}, {"low": 5, "high": 10}])
-        )
-        check = np.vstack(
-            ([self.exp_normal, self.exp_poisson], [self.exp_poisson, self.exp_unif])
-        )
+        Wt = np.vstack((
+            [np.random.normal, np.random.poisson],
+            [np.random.poisson, np.random.uniform],
+        ))
+        Wtargs = np.vstack((
+            [{"loc": 2, "scale": 2}, {"lam": 5}],
+            [{"lam": 5}, {"low": 5, "high": 10}],
+        ))
+        check = np.vstack((
+            [self.exp_normal, self.exp_poisson],
+            [self.exp_poisson, self.exp_unif],
+        ))
         A = sbm(self.n, self.Psy, wt=Wt, directed=False, loops=True, wtargs=Wtargs)
         for i in range(0, len(self.n)):
             for j in range(0, len(self.n)):
@@ -599,14 +589,10 @@ class Test_WSBM(unittest.TestCase):
         np.random.seed(self.seed)
         funcs = [np.random.power, np.random.uniform]
         dc_kwss = [{"a": 3}, {"low": 5, "high": 10}]
-        dc = np.hstack(
-            (
-                [
-                    [funcs[i](**dc_kwss[i]) for _ in range(self.n[i])]
-                    for i in range(len(self.n))
-                ]
-            )
-        )
+        dc = np.hstack(([
+            [funcs[i](**dc_kwss[i]) for _ in range(self.n[i])]
+            for i in range(len(self.n))
+        ]))
         for i in range(0, len(self.n)):
             dc[self.vcount[i] - self.n[i] : self.vcount[i]] /= sum(
                 dc[self.vcount[i] - self.n[i] : self.vcount[i]]
@@ -615,12 +601,9 @@ class Test_WSBM(unittest.TestCase):
         communities = np.hstack([[comm] * self.n[comm] for comm in range(len(self.n))])
         for i, ki in zip(range(sum(self.n)), communities):
             degree = sum([A[i][j] for j in range(sum(self.n))])
-            theta_hat = degree / sum(
-                [
-                    self.Psy[ki][kj] * self.n[ki] * self.n[kj]
-                    for kj in range(len(self.n))
-                ]
-            )
+            theta_hat = degree / sum([
+                self.Psy[ki][kj] * self.n[ki] * self.n[kj] for kj in range(len(self.n))
+            ])
             self.assertTrue(np.isclose(theta_hat, dc[i], atol=0.01))
         # check dimensions
         self.assertTrue(A.shape == (np.sum(self.n), np.sum(self.n)))
@@ -783,7 +766,7 @@ class Test_WSBM(unittest.TestCase):
             dc = -1 * np.ones(sum(self.n))
             sbm(self.n, self.Psy, dc=dc)
 
-        with self.assertWarns(UserWarning):
+        with pytest.warns(UserWarning):
             # Check that probabilities sum to 1 in each block
             dc = np.ones(sum(self.n))
             sbm(self.n, self.Psy, dc=dc)
@@ -818,7 +801,7 @@ class Test_WSBM(unittest.TestCase):
             sbm(self.n, self.Psy, dc=dc, dc_kws=dc_kws)
 
 
-class Test_RDPG(unittest.TestCase):
+class TestRDPG(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.n = [50, 70]
@@ -888,8 +871,16 @@ class Test_RDPG(unittest.TestCase):
         self.assertTrue(is_symmetric(g))
         self.assertTrue(is_loopless(g))
 
+    def test_weight_function_args_can_be_none(self):
+        def weight_fn(size):
+            return size
 
-class Test_MMSBM(unittest.TestCase):
+        X = np.array([[1, 1], [1, 1], [1, 1], [1, 0], [1, 0]])
+        A = rdpg(X, wt=weight_fn)
+        self.assertTrue(A.shape, (5, 5))
+
+
+class TestMMSBM(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # 120 vertex graph

@@ -1,19 +1,19 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
-import io
-import networkx as nx
-import numpy as np
 import unittest
 
-from sklearn.metrics import adjusted_rand_score
+import networkx as nx
+import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score
 
 import graspologic as gc
 
 
 class Node2VecEmbedTest(unittest.TestCase):
     def test_n2v_returns_same_labels_with_different_nodeid_types(self):
+        random_seed = 1
         probability_matrix = np.array([[0.95, 0.01], [0.01, 0.95]])
         number_of_nodes_per_community = [20, 20]
 
@@ -28,10 +28,13 @@ class Node2VecEmbedTest(unittest.TestCase):
             graph.add_edge(s, t, weight=1)
             graph_as_strings.add_edge(str(s), str(t), weight=1)
 
-        original_embedding = gc.embed.node2vec_embed(graph, random_seed=1)
-        string_embedding = gc.embed.node2vec_embed(graph_as_strings, random_seed=1)
+        original_embedding = gc.embed.node2vec_embed(graph, random_seed=random_seed)
+        string_embedding = gc.embed.node2vec_embed(
+            graph_as_strings, random_seed=random_seed
+        )
 
-        k = KMeans(n_clusters=2)
+        k = KMeans(n_clusters=2, random_state=random_seed)
+
         original_labels = k.fit_predict(original_embedding[0])
         string_labels = k.fit_predict(string_embedding[0])
 
@@ -63,8 +66,9 @@ class Node2VecEmbedTest(unittest.TestCase):
         undirected_embedding = gc.embed.node2vec_embed(graph, random_seed=1)
         directed_embedding = gc.embed.node2vec_embed(graph_directed, random_seed=1)
 
-        k = KMeans(n_clusters=2)
+        k = KMeans(n_clusters=2, random_state=1234)
         undirected_labels = k.fit_predict(undirected_embedding[0])
+        k = KMeans(n_clusters=2, random_state=1234)
         directed_labels = k.fit_predict(directed_embedding[0])
 
         expected_labels = np.zeros(40, dtype=int)
@@ -105,6 +109,34 @@ class Node2VecEmbedTest(unittest.TestCase):
 
         # vocab list should have exactly 34 elements
         self.assertEqual(len(vocab_list), 15)
+
+    def test_node2vec_embedding_unweighted_florentine_graph_correct_shape_is_returned(
+        self,
+    ):
+        graph = nx.florentine_families_graph()
+
+        model = gc.embed.node2vec_embed(graph)
+        model_matrix: np.ndarray = model[0]
+        vocab_list = model[1]
+        self.assertIsNotNone(model)
+        self.assertIsNotNone(model[0])
+        self.assertIsNotNone(model[1])
+
+        # model matrix should be 34 x 128
+        self.assertEqual(model_matrix.shape[0], 15)
+        self.assertEqual(model_matrix.shape[1], 128)
+
+        # vocab list should have exactly 34 elements
+        self.assertEqual(len(vocab_list), 15)
+
+    def test_node2vec_same_labels_are_returned(self):
+        graph = nx.florentine_families_graph()
+        node_ids = list(graph.nodes())
+
+        embedding, labels = gc.embed.node2vec_embed(graph)
+
+        for i in range(len(node_ids)):
+            self.assertEqual(node_ids[i], labels[i])
 
     def test_node2vec_embedding_barbell_graph_correct_shape_is_returned(self):
         graph = nx.barbell_graph(25, 2)
@@ -156,3 +188,12 @@ class Node2VecEmbedTest(unittest.TestCase):
         )
 
         self.assertEqual(w, expected_walk_length)
+
+    def test_random_state_is_initialized_in_constructor(self):
+        graph = nx.barbell_graph(25, 2)
+        start_node = "0"
+
+        n2v = gc.embed.n2v._Node2VecGraph(graph, 1, 1)
+        n2v._preprocess_transition_probabilities()
+        walk = n2v.node2vec_walk(5, start_node, None)
+        self.assertGreater(len(walk), 0)

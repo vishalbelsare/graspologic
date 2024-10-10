@@ -1,4 +1,0 @@
-recursive-include graspologic/datasets *.edgelist
-recursive-include graspologic/datasets *.csv
-recursive-include graspologic/layouts/include colors-100.json
-exclude tests/*

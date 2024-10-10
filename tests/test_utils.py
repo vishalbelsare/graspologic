@@ -1,16 +1,37 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+import random
 import unittest
+import warnings
 from math import sqrt
 
 import networkx as nx
 import numpy as np
-import pytest
 from numpy.testing import assert_equal
+from scipy.sparse import csr_array
 
 from graspologic.utils import remap_labels
 from graspologic.utils import utils as gus
+
+
+class TestAverageMatrices(unittest.TestCase):
+    def test_mean_dense_and_sparse_are_equivalent(self):
+        trials = 20
+
+        for _ in range(trials):
+            number_of_graphs = random.randint(2, 10)
+
+            dim = random.randint(2, 100)
+            dim2 = random.randint(2, 100)
+
+            graphs = [np.random.rand(dim, dim2) for _ in range(number_of_graphs)]
+            graphs_sparse = [csr_array(graph) for graph in graphs]
+
+            graphs_averaged = gus.average_matrices(graphs)
+            graphs_sparse_averaged = gus.average_matrices(graphs_sparse).todense()
+
+            np.testing.assert_almost_equal(graphs_averaged, graphs_sparse_averaged)
 
 
 class TestInput(unittest.TestCase):
@@ -132,10 +153,42 @@ class TestChecks(unittest.TestCase):
             np.random.normal(size=nedge),
         )
 
-    def test_is_unweighted(self):
+    def test_is_unweighted_for_mixed_zeros_ones_ndarray(self):
         B = np.array([[0, 1, 0, 0], [1, 0, 1, 0], [0, 1.0, 0, 0], [1, 0, 1, 0]])
         self.assertTrue(gus.is_unweighted(B))
+
+    def test_is_unweighted_for_random_ndarray(self):
         self.assertFalse(gus.is_unweighted(self.A))
+
+    def test_is_unweighted_for_zeros_ndarray(self):
+        self.assertTrue(gus.is_unweighted(np.zeros((10, 10))))
+
+    def test_is_unweighted_for_ones_ndarray(self):
+        self.assertTrue(gus.is_unweighted(np.ones((10, 10))))
+
+    def test_is_unweighted_for_zeros_csr_array(self):
+        m = csr_array((10, 10))
+        self.assertTrue(gus.is_unweighted(m))
+
+    def test_is_unweighted_for_ones_csr_array(self):
+        m = csr_array(np.ones((10, 10)))
+        self.assertTrue(gus.is_unweighted(m))
+
+    def test_is_unweighted_for_mixed_zeros_ones_csr_array(self):
+        m = csr_array((10_000, 10_000))
+        m[0, 1] = 1
+        m[1, 1] = 0
+        m[9_999, 9_999] = 1.0
+        self.assertTrue(gus.is_unweighted(m))
+
+    def test_is_unweighted_for_random_csr_array(self):
+        dim = 10_000
+        num_nonzero = 20
+        rows = np.random.randint(0, dim, num_nonzero)
+        columns = np.random.randint(0, dim, num_nonzero)
+        m = csr_array((dim, dim))
+        m[rows, columns] = np.random.random(num_nonzero)
+        self.assertFalse(gus.is_unweighted(m))
 
     def test_is_fully_connected(self):
         # graph where node at index [3] only connects to self
@@ -156,15 +209,13 @@ class TestChecks(unittest.TestCase):
 
 class TestLCC(unittest.TestCase):
     def test_lcc_networkx(self):
-        expected_lcc_matrix = np.array(
-            [
-                [0, 1, 1, 0, 0],
-                [0, 0, 0, 0, 0],
-                [0, 0, 0, 1, 1],
-                [0, 1, 0, 0, 0],
-                [0, 0, 1, 0, 0],
-            ]
-        )
+        expected_lcc_matrix = np.array([
+            [0, 1, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+        ])
         expected_nodelist = np.array([1, 2, 3, 4, 6])
         g = nx.DiGraph()
         [g.add_node(i) for i in range(1, 7)]
@@ -184,15 +235,13 @@ class TestLCC(unittest.TestCase):
         np.testing.assert_array_equal(lcc_matrix, expected_lcc_matrix)
 
     def test_lcc_networkx_undirected(self):
-        expected_lcc_matrix = np.array(
-            [
-                [0, 1, 1, 0, 0],
-                [1, 0, 0, 1, 0],
-                [1, 0, 0, 1, 1],
-                [0, 1, 1, 0, 0],
-                [0, 0, 1, 0, 0],
-            ]
-        )
+        expected_lcc_matrix = np.array([
+            [0, 1, 1, 0, 0],
+            [1, 0, 0, 1, 0],
+            [1, 0, 0, 1, 1],
+            [0, 1, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+        ])
         expected_nodelist = np.array([1, 2, 3, 4, 6])
         g = nx.Graph()
         [g.add_node(i) for i in range(1, 7)]
@@ -211,15 +260,13 @@ class TestLCC(unittest.TestCase):
         np.testing.assert_array_equal(lcc_matrix, expected_lcc_matrix)
 
     def test_lcc_numpy(self):
-        expected_lcc_matrix = np.array(
-            [
-                [0, 1, 1, 0, 0],
-                [0, 0, 0, 0, 0],
-                [0, 0, 0, 1, 1],
-                [0, 1, 0, 0, 0],
-                [0, 0, 1, 0, 0],
-            ]
-        )
+        expected_lcc_matrix = np.array([
+            [0, 1, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+        ])
         expected_nodelist = np.array([0, 1, 2, 3, 5])
         g = nx.DiGraph()
         [g.add_node(i) for i in range(1, 7)]
@@ -237,13 +284,57 @@ class TestLCC(unittest.TestCase):
         lcc_matrix = gus.largest_connected_component(g)
         np.testing.assert_array_equal(lcc_matrix, expected_lcc_matrix)
 
+    def test_lcc_scipy(self):
+        expected_lcc_matrix = np.array([
+            [0, 1, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+        ])
+        expected_nodelist = np.array([0, 1, 2, 3, 5])
+        adjacency = np.array([
+            [0, 1, 1, 0, 0, 0, 0],  # connected
+            [0, 0, 0, 0, 0, 0, 0],  # connected
+            [0, 0, 0, 1, 0, 1, 0],  # connected
+            [0, 1, 0, 0, 0, 0, 0],  # connected
+            [0, 0, 0, 0, 0, 0, 0],  # not connected
+            [0, 0, 1, 0, 0, 0, 0],  # connected
+            [0, 0, 0, 0, 0, 0, 0],  # not connected
+        ])
+        sparse_adjacency = csr_array(adjacency)
+
+        lcc_matrix, nodelist = gus.largest_connected_component(
+            sparse_adjacency, return_inds=True
+        )
+        np.testing.assert_array_equal(lcc_matrix.toarray(), expected_lcc_matrix)
+        np.testing.assert_array_equal(nodelist, expected_nodelist)
+
+    def test_lcc_scipy_empty(self):
+        adjacency = np.array([[0, 1], [1, 0]])
+        adjacency = csr_array(adjacency)
+
+        # remove the actual connecting edges. this is now a disconnected graph
+        # with two nodes. however, scipy still stores the entry that now has a 0 in it
+        # as having a 'nonempty' value, which is used in the lcc calculation
+        adjacency[0, 1] = 0
+        adjacency[1, 0] = 0
+        lcc_adjacency = gus.largest_connected_component(adjacency)
+        assert lcc_adjacency.shape[0] == 1
+
     def test_multigraph_lcc_numpystack(self):
-        expected_g_matrix = np.array(
-            [[0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
-        expected_f_matrix = np.array(
-            [[0, 1, 0, 0], [1, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
+        expected_g_matrix = np.array([
+            [0, 1, 0, 0],
+            [0, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
+        expected_f_matrix = np.array([
+            [0, 1, 0, 0],
+            [1, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
         expected_mats = [expected_f_matrix, expected_g_matrix]
         expected_nodelist = np.array([0, 2, 3, 5])
         g = nx.DiGraph()
@@ -296,12 +387,18 @@ class TestLCC(unittest.TestCase):
             np.testing.assert_array_equal(nodelist, expected_nodelist)
 
     def test_multigraph_lcc_numpylist(self):
-        expected_g_matrix = np.array(
-            [[0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
-        expected_f_matrix = np.array(
-            [[0, 1, 0, 0], [1, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
+        expected_g_matrix = np.array([
+            [0, 1, 0, 0],
+            [0, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
+        expected_f_matrix = np.array([
+            [0, 1, 0, 0],
+            [1, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
         expected_mats = [expected_f_matrix, expected_g_matrix]
         expected_nodelist = np.array([0, 2, 3, 5])
         g = nx.DiGraph()
@@ -327,12 +424,18 @@ class TestLCC(unittest.TestCase):
             np.testing.assert_array_equal(graph, expected_mats[i])
 
     def test_multigraph_lcc_networkx(self):
-        expected_g_matrix = np.array(
-            [[0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
-        expected_f_matrix = np.array(
-            [[0, 1, 0, 0], [1, 0, 1, 1], [0, 0, 0, 0], [0, 1, 0, 0]]
-        )
+        expected_g_matrix = np.array([
+            [0, 1, 0, 0],
+            [0, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
+        expected_f_matrix = np.array([
+            [0, 1, 0, 0],
+            [1, 0, 1, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ])
         expected_mats = [expected_f_matrix, expected_g_matrix]
         expected_nodelist = np.array([1, 3, 4, 6])
         g = nx.DiGraph()
@@ -368,15 +471,13 @@ class TestLCC(unittest.TestCase):
 
 class TestDiagonalAugment(unittest.TestCase):
     def test_augment_diagonal_undirected(self):
-        A = np.array(
-            [
-                [0, 1, 1, 0, 0],
-                [1, 0, 0, 2, 1],
-                [1, 0, 0, 1, 1],
-                [0, 2, 1, 0, 0],
-                [0, 1, 1, 0, 0],
-            ]
-        )
+        A = np.array([
+            [0, 1, 1, 0, 0],
+            [1, 0, 0, 2, 1],
+            [1, 0, 0, 1, 1],
+            [0, 2, 1, 0, 0],
+            [0, 1, 1, 0, 0],
+        ])
         expected = A.copy().astype(float)
         expected[0, 0] = 2.0 / 4
         expected[1, 1] = 4.0 / 4
@@ -387,15 +488,13 @@ class TestDiagonalAugment(unittest.TestCase):
         np.testing.assert_array_equal(A_aug, expected)
 
     def test_augment_diagonal_directed(self):
-        A = np.array(
-            [
-                [0, 1, -1, 0, 0],
-                [0, 0, 0, 2, 1],
-                [1, 0, 0, 1, 1],
-                [0, 2, 0, 0, 0],
-                [0, 0, 1, 0, 0],
-            ]
-        )
+        A = np.array([
+            [0, 1, -1, 0, 0],
+            [0, 0, 0, 2, 1],
+            [1, 0, 0, 1, 1],
+            [0, 2, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+        ])
         expected = A.copy().astype(float)
         expected[0, 0] = 1.5 / 4
         expected[1, 1] = 3 / 4
@@ -420,24 +519,20 @@ def test_binarize():
 
 class TestRemoveVertices(unittest.TestCase):
     def setUp(self):
-        self.directed = np.array(
-            [
-                [0, 2, 3, 4, 5],
-                [6, 0, 8, 9, 10],
-                [11, 12, 0, 14, 15],
-                [16, 17, 18, 0, 20],
-                [21, 22, 23, 24, 0],
-            ]
-        )
-        self.undirected = np.array(
-            [
-                [0, 6, 11, 16, 21],
-                [6, 0, 12, 17, 22],
-                [11, 12, 0, 18, 23],
-                [16, 17, 18, 0, 24],
-                [21, 22, 23, 24, 0],
-            ]
-        )
+        self.directed = np.array([
+            [0, 2, 3, 4, 5],
+            [6, 0, 8, 9, 10],
+            [11, 12, 0, 14, 15],
+            [16, 17, 18, 0, 20],
+            [21, 22, 23, 24, 0],
+        ])
+        self.undirected = np.array([
+            [0, 6, 11, 16, 21],
+            [6, 0, 12, 17, 22],
+            [11, 12, 0, 18, 23],
+            [16, 17, 18, 0, 24],
+            [21, 22, 23, 24, 0],
+        ])
 
     def test_undirected(self):
         # with list index
@@ -486,18 +581,18 @@ class TestRemoveVertices(unittest.TestCase):
 
     def test_exceptions(self):
         # ensure proper errors are thrown when invalid inputs are passed.
-        with pytest.raises(TypeError):
+        with self.assertRaises(TypeError):
             gus.remove_vertices(9001, 0)
 
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             nonsquare = np.vstack((self.directed, self.directed))
             gus.remove_vertices(nonsquare, 0)
 
-        with pytest.raises(IndexError):
+        with self.assertRaises(IndexError):
             indices = np.arange(len(self.directed) + 1)
             gus.remove_vertices(self.directed, indices)
 
-        with pytest.raises(IndexError):
+        with self.assertRaises(IndexError):
             idx = len(self.directed) + 1
             gus.remove_vertices(self.directed, indices)
 
@@ -535,17 +630,17 @@ class TestRemapLabels(unittest.TestCase):
         assert_equal(y_true, y_pred_remapped)
 
     def test_inputs(self):
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             # handled by sklearn confusion matrix
             remap_labels(self.y_true[1:], self.y_pred)
 
-        with pytest.raises(TypeError):
+        with self.assertRaises(TypeError):
             remap_labels(8, self.y_pred)
 
-        with pytest.raises(TypeError):
+        with self.assertRaises(TypeError):
             remap_labels(self.y_pred, self.y_true, return_map="hi")
 
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             remap_labels(self.y_pred, ["ant", "ant", "cat", "cat", "bird", "bird"])
 
 
@@ -554,8 +649,23 @@ class TestRemapNodeIds(unittest.TestCase):
         invalid_types = [str, int, list]
 
         for type in invalid_types:
-            with pytest.raises(TypeError):
+            with self.assertRaises(TypeError):
                 gus.remap_node_ids(graph=type())
+
+    def test_remap_node_ids_unweighted_graph_raises_warning(self):
+        with warnings.catch_warnings(record=True) as warnings_context_manager:
+            graph = nx.florentine_families_graph()
+
+            gus.remap_node_ids(graph)
+
+            self.assertEqual(len(warnings_context_manager), 1)
+            self.assertTrue(
+                issubclass(warnings_context_manager[0].category, UserWarning)
+            )
+            self.assertTrue(
+                "Graph has at least one unweighted edge"
+                in str(warnings_context_manager[0].message)
+            )
 
     def _assert_graphs_are_equivalent(self, graph, new_graph, new_node_ids):
         self.assertTrue(len(new_graph.nodes()) == len(graph.nodes()))

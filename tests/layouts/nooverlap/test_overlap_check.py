@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import unittest
+
 from graspologic.layouts.nooverlap._node import _Node
 from graspologic.layouts.nooverlap._quad_node import (
     _QuadNode,
@@ -31,7 +32,6 @@ class TestOverlapCheck(unittest.TestCase):
         self.assertFalse(overlaps)
 
     def test_overlap_check_list(self):
-
         to_check = _Node(0, 2, 2, 1, -1, "blue")
         others = [
             _Node(1, 5, 5, 1, -1, "blue"),

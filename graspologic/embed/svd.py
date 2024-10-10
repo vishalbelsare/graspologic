@@ -1,14 +1,22 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+from typing import Optional, Union
+
 import numpy as np
 import scipy
+import scipy.sparse as sp
 import sklearn
+from scipy.sparse import csr_array
 from scipy.stats import norm
-from scipy.sparse import isspmatrix_csr
+from typing_extensions import Literal
+
+from graspologic.types import List, Tuple
+
+SvdAlgorithmType = Literal["full", "truncated", "randomized", "eigsh"]
 
 
-def _compute_likelihood(arr):
+def _compute_likelihood(arr: np.ndarray) -> np.ndarray:
     """
     Computes the log likelihoods based on normal distribution given
     a 1d-array of sorted values. If the input has no variance,
@@ -36,7 +44,7 @@ def _compute_likelihood(arr):
             mu2 = -np.inf
 
         # compute pooled variance
-        variance = ((np.sum((s1 - mu1) ** 2) + np.sum((s2 - mu2) ** 2))) / (
+        variance = (np.sum((s1 - mu1) ** 2) + np.sum((s2 - mu2) ** 2)) / (
             n_elements - 1 - (idx < n_elements)
         )
         std = np.sqrt(variance)
@@ -50,8 +58,14 @@ def _compute_likelihood(arr):
 
 
 def select_dimension(
-    X, n_components=None, n_elbows=2, threshold=None, return_likelihoods=False
-):
+    X: Union[np.ndarray, sp.csr_array],
+    n_components: Optional[int] = None,
+    n_elbows: int = 2,
+    threshold: Optional[float] = None,
+    return_likelihoods: bool = False,
+) -> Union[
+    Tuple[List[int], List[float]], Tuple[List[int], List[float], List[np.ndarray]]
+]:
     """
     Generates profile likelihood from array based on Zhu and Godsie method.
     Elbows correspond to the optimal embedding dimension.
@@ -93,8 +107,8 @@ def select_dimension(
         pp.918-930.
     """
     # Handle input data
-    if not isinstance(X, np.ndarray) and not isspmatrix_csr(X):
-        msg = "X must be a numpy array or scipy.sparse.csr_matrix, not {}.".format(
+    if not isinstance(X, (np.ndarray, csr_array)):
+        msg = "X must be a numpy array or scipy.sparse.csr_array, not {}.".format(
             type(X)
         )
         raise ValueError(msg)
@@ -110,7 +124,7 @@ def select_dimension(
         msg = "n_elbows must be an integer, not {}.".format(type(n_elbows))
         raise ValueError(msg)
     elif n_elbows < 1:
-        msg = "number of elbows should be an integer > 1, not {}.".format(n_elbows)
+        msg = f"number of elbows should be an integer > 1, not {n_elbows}."
         raise ValueError(msg)
 
     # Handle threshold
@@ -159,7 +173,7 @@ def select_dimension(
         if arr.size <= 1:  # Cant compute likelihoods with 1 numbers
             break
         lq = _compute_likelihood(arr)
-        idx += np.argmax(lq) + 1
+        idx += np.argmax(lq).item() + 1
         elbows.append(idx)
         values.append(D[idx - 1])
         likelihoods.append(lq)
@@ -170,7 +184,14 @@ def select_dimension(
         return elbows, values
 
 
-def selectSVD(X, n_components=None, n_elbows=2, algorithm="randomized", n_iter=5):
+def select_svd(
+    X: Union[np.ndarray, sp.csr_array],
+    n_components: Optional[int] = None,
+    n_elbows: Optional[int] = 2,
+    algorithm: SvdAlgorithmType = "randomized",
+    n_iter: int = 5,
+    svd_seed: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     r"""
     Dimensionality reduction using SVD.
 
@@ -202,13 +223,21 @@ def selectSVD(X, n_components=None, n_elbows=2, algorithm="randomized", n_iter=5
             :func:`sklearn.utils.extmath.randomized_svd`
         - 'full'
             Computes full svd using :func:`scipy.linalg.svd`
-            Does not support ``graph`` input of type scipy.sparse.csr_matrix
+            Does not support ``graph`` input of type scipy.sparse.csr_array
         - 'truncated'
             Computes truncated svd using :func:`scipy.sparse.linalg.svds`
+        - 'eigsh'
+            Computes svd of a real, symmetric square matrix using
+            :func:`scipy.sparse.linalg.eigsh`. Extremely fast for these types of
+            matrices.
     n_iter : int, optional (default = 5)
         Number of iterations for randomized SVD solver. Not used by 'full' or
         'truncated'. The default is larger than the default in randomized_svd
         to handle sparse matrices that may have large slowly decaying spectrum.
+
+    svd_seed : int or None (default ``None``)
+        Only applicable for ``algorithm="randomized"``; allows you to seed the
+        randomized svd solver for deterministic, albeit pseudo-randomized behavior.
 
     Returns
     -------
@@ -232,38 +261,70 @@ def selectSVD(X, n_components=None, n_elbows=2, algorithm="randomized", n_iter=5
         raise ValueError(msg)
 
     # Deal with algorithms
-    if algorithm not in ["full", "truncated", "randomized"]:
-        msg = "algorithm must be one of {full, truncated, randomized}."
+    if algorithm not in ["full", "truncated", "randomized", "eigsh"]:
+        msg = "algorithm must be one of {full, truncated, randomized, eigsh}."
         raise ValueError(msg)
 
-    if algorithm == "full" and isspmatrix_csr(X):
-        msg = "'full' agorithm does not support scipy.sparse.csr_matrix inputs."
+    if algorithm == "full" and sp.isspmatrix_csr(X):
+        msg = "'full' agorithm does not support scipy.sparse.csr_array inputs."
         raise TypeError(msg)
 
     if n_components is None:
-        elbows, _ = select_dimension(X, n_elbows=n_elbows, threshold=None)
-        n_components = elbows[-1]
+        if n_elbows is None:
+            raise ValueError(
+                "both n_components and n_elbows are None. One must be provided."
+            )
+        else:
+            dims = select_dimension(X, n_elbows=n_elbows, threshold=None)
+            elbows = dims[0]
+            n_components = elbows[-1]
 
     # Check
     if (algorithm == "full") & (n_components > min(X.shape)):
         msg = "n_components must be <= min(X.shape)."
         raise ValueError(msg)
-    elif algorithm == "full":
+
+    if (algorithm in ["truncated", "randomized"]) & (n_components >= min(X.shape)):
+        msg = "n_components must be strictly < min(X.shape)."
+        raise ValueError(msg)
+
+    if algorithm == "full":
         U, D, V = scipy.linalg.svd(X)
         U = U[:, :n_components]
         D = D[:n_components]
         V = V[:n_components, :]
 
-    if (algorithm in ["truncated", "randomized"]) & (n_components >= min(X.shape)):
-        msg = "n_components must be strictly < min(X.shape)."
-        raise ValueError(msg)
     elif algorithm == "truncated":
         U, D, V = scipy.sparse.linalg.svds(X, k=n_components)
         idx = np.argsort(D)[::-1]  # sort in decreasing order
         D = D[idx]
         U = U[:, idx]
         V = V[idx, :]
+
+    elif algorithm == "eigsh":
+        D, U = scipy.sparse.linalg.eigsh(X, k=n_components)
+        # singular values of a real symmetric matrix are the absolute values of its
+        # eigenvalues, so need to take np.abs
+        D = np.abs(D)
+        V = U.T
+
+        # sort in decreasing order
+        idx = np.argsort(D)[::-1]
+        D = D[idx]
+        U = U[:, idx]
+        V = V[idx, :]
+
     elif algorithm == "randomized":
-        U, D, V = sklearn.utils.extmath.randomized_svd(X, n_components, n_iter=n_iter)
+        # for some reason, randomized_svd defaults random_state to 0 if not provided
+        # which is weird because None is a valid starting point too
+        svd_seed = svd_seed if svd_seed is not None else 0
+        U, D, V = sklearn.utils.extmath.randomized_svd(
+            X, n_components, n_iter=n_iter, random_state=svd_seed
+        )
+
+    else:
+        raise ValueError(
+            "algorithm must be in {'full', 'truncated', 'randomized', 'eigsh'}"
+        )
 
     return U, D, V

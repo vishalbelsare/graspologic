@@ -1,9 +1,14 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+import warnings
+from typing import Any, Optional, Union
+
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import adjusted_rand_score
 from sklearn.mixture import GaussianMixture
 from sklearn.mixture._gaussian_mixture import (
@@ -11,13 +16,15 @@ from sklearn.mixture._gaussian_mixture import (
     _estimate_gaussian_parameters,
 )
 from sklearn.model_selection import ParameterGrid
+from sklearn.utils import check_scalar
+from typing_extensions import Literal
 
-from sklearn.exceptions import ConvergenceWarning
-
-from joblib import Parallel, delayed
-import warnings
+from graspologic.types import Dict, List, Tuple
 
 from .base import BaseCluster
+
+ParamGridType = List[Dict[str, Any]]
+CovarianceType = Literal["full", "tied", "diag", "spherical"]
 
 
 class AutoGMMCluster(BaseCluster):
@@ -117,6 +124,12 @@ class AutoGMMCluster(BaseCluster):
         If provided, min_components and ``max_components`` must match the number of
         unique labels given here.
 
+    kmeans_n_init : int, optional (default = 1)
+        If ``kmeans_n_init`` is larger than 1 and ``label_init`` is None, additional
+        ``kmeans_n_init``-1 runs of :class:`sklearn.mixture.GaussianMixture`
+        initialized with k-means will be performed
+        for all covariance parameters in ``covariance_type``.
+
     max_iter : int, optional (default = 100).
         The maximum number of EM iterations to perform.
 
@@ -209,18 +222,19 @@ class AutoGMMCluster(BaseCluster):
 
     def __init__(
         self,
-        min_components=2,
-        max_components=10,
-        affinity="all",
-        linkage="all",
-        covariance_type="all",
-        random_state=None,
-        label_init=None,
-        max_iter=100,
-        verbose=0,
-        selection_criteria="bic",
-        max_agglom_size=2000,
-        n_jobs=None,
+        min_components: int = 2,
+        max_components: Optional[int] = 10,
+        affinity: Union[str, np.ndarray, List[str]] = "all",
+        linkage: Union[str, np.ndarray, List[str]] = "all",
+        covariance_type: Union[str, np.ndarray, List[str]] = "all",
+        random_state: Optional[Union[int, np.random.RandomState]] = None,
+        label_init: Optional[Union[np.ndarray, List[int]]] = None,
+        kmeans_n_init: int = 1,
+        max_iter: int = 100,
+        verbose: int = 0,
+        selection_criteria: str = "bic",
+        max_agglom_size: Optional[int] = 2000,
+        n_jobs: Optional[int] = None,
     ):
         if isinstance(min_components, int):
             if min_components <= 0:
@@ -362,6 +376,10 @@ class AutoGMMCluster(BaseCluster):
             raise TypeError("`max_agglom_size` must be an int or None")
         if max_agglom_size is not None and max_agglom_size < 2:
             raise ValueError("Must use at least 2 points for `max_agglom_size`")
+        if not isinstance(n_jobs, int) and n_jobs is not None:
+            raise TypeError("`n_jobs` must be an int or None")
+
+        check_scalar(kmeans_n_init, name="kmeans_n_init", target_type=int, min_val=1)
 
         self.min_components = min_components
         self.max_components = max_components
@@ -370,13 +388,22 @@ class AutoGMMCluster(BaseCluster):
         self.covariance_type = new_covariance_type
         self.random_state = random_state
         self.label_init = labels_init
+        self.kmeans_n_init = kmeans_n_init
         self.max_iter = max_iter
         self.verbose = verbose
         self.selection_criteria = selection_criteria
         self.max_agglom_size = max_agglom_size
         self.n_jobs = n_jobs
 
-    def _fit_cluster(self, X, X_subset, y, params, agg_clustering):
+    def _fit_cluster(
+        self,
+        X: np.ndarray,
+        X_subset: np.ndarray,
+        y: Optional[np.ndarray],
+        params: ParamGridType,
+        agg_clustering: Union[List[int], np.ndarray],
+        seed: int,
+    ) -> Dict[str, Any]:
         label_init = self.label_init
         if label_init is not None:
             onehot = _labels_to_onehot(label_init)
@@ -401,6 +428,7 @@ class AutoGMMCluster(BaseCluster):
             gm_params["init_params"] = "kmeans"
         gm_params["reg_covar"] = 0
         gm_params["max_iter"] = self.max_iter
+        gm_params["random_state"] = seed
 
         criter = np.inf  # if none of the iterations converge, bic/aic is set to inf
         # below is the regularization scheme
@@ -450,7 +478,7 @@ class AutoGMMCluster(BaseCluster):
         }
         return results
 
-    def fit(self, X, y=None):
+    def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "AutoGMMCluster":
         """
         Fits gaussian mixture model to the data.
         Initialize with agglomerative clustering then
@@ -510,15 +538,25 @@ class AutoGMMCluster(BaseCluster):
                 msg = "n_samples must be the same as the length of label_init"
                 raise ValueError(msg)
 
-        param_grid = dict(
+        param_grid_values = dict(
             affinity=self.affinity,
             linkage=self.linkage,
             covariance_type=self.covariance_type,
             n_components=range(lower_ncomponents, upper_ncomponents + 1),
-            random_state=[self.random_state],
         )
-        param_grid = list(ParameterGrid(param_grid))
-        param_grid_ag, param_grid = _process_paramgrid(param_grid)
+        param_grid: ParamGridType = list(ParameterGrid(param_grid_values))
+
+        param_grid_ag, processed_param_grid = _process_paramgrid(
+            param_grid, self.kmeans_n_init, self.label_init
+        )
+
+        if isinstance(self.random_state, int):
+            np.random.seed(self.random_state)
+            seeds = np.random.randint(
+                np.iinfo(np.int32).max, size=len(processed_param_grid)
+            )
+        else:
+            seeds = np.array([self.random_state] * len(processed_param_grid))
 
         n = X.shape[0]
         if self.max_agglom_size is None or n <= self.max_agglom_size:
@@ -527,12 +565,16 @@ class AutoGMMCluster(BaseCluster):
             subset_idxs = np.random.choice(np.arange(0, n), self.max_agglom_size)
             X_subset = X[subset_idxs, :]
 
-        ag_labels = []
+        ag_labels: List[np.ndarray] = []
         if self.label_init is None:
             for p_ag in param_grid_ag:
                 if p_ag["affinity"] != "none":
+                    p_ag_without_affinity = p_ag.copy()
+                    affinity = p_ag_without_affinity.pop("affinity", None)
                     agg = AgglomerativeClustering(
-                        n_clusters=self.min_components, **p_ag
+                        n_clusters=self.min_components,
+                        metric=affinity,
+                        **p_ag_without_affinity,
                     )
                     agg.fit(X_subset)
                     hierarchical_labels = _hierarchical_labels(
@@ -540,17 +582,19 @@ class AutoGMMCluster(BaseCluster):
                     )
                     ag_labels.append(hierarchical_labels)
 
-        def _fit_for_data(p):
+        def _fit_for_data(p: ParamGridType, seed: int) -> Dict[str, Any]:
             n_clusters = p[1]["n_components"]
+            agg_clustering: Union[List[int], np.ndarray]
             if (p[0]["affinity"] != "none") and (self.label_init is None):
                 index = param_grid_ag.index(p[0])
                 agg_clustering = ag_labels[index][:, n_clusters - self.min_components]
             else:
                 agg_clustering = []
-            return self._fit_cluster(X, X_subset, y, p, agg_clustering)
+            return self._fit_cluster(X, X_subset, y, p, agg_clustering, seed)
 
         results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(_fit_for_data)(p) for p in param_grid
+            delayed(_fit_for_data)(p, seed)
+            for p, seed in zip(processed_param_grid, seeds)
         )
         results = pd.DataFrame(results)
 
@@ -570,7 +614,7 @@ class AutoGMMCluster(BaseCluster):
         return self
 
 
-def _increase_reg(reg):
+def _increase_reg(reg: float) -> float:
     """
     Increase regularization factor by factor of 10.
 
@@ -591,7 +635,9 @@ def _increase_reg(reg):
     return reg
 
 
-def _onehot_to_initial_params(X, onehot, cov_type):
+def _onehot_to_initial_params(
+    X: np.ndarray, onehot: np.ndarray, cov_type: CovarianceType
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Computes cluster weights, cluster means and cluster precisions from
     a given clustering.
@@ -625,7 +671,7 @@ def _onehot_to_initial_params(X, onehot, cov_type):
     return weights, means, precisions
 
 
-def _labels_to_onehot(labels):
+def _labels_to_onehot(labels: Union[List[int], np.ndarray]) -> np.ndarray:
     """
     Converts labels to one-hot format.
 
@@ -647,7 +693,9 @@ def _labels_to_onehot(labels):
     return onehot
 
 
-def _process_paramgrid(paramgrid):
+def _process_paramgrid(
+    paramgrid: ParamGridType, kmeans_n_init: int, label_init: Optional[np.ndarray]
+) -> Tuple[ParamGridType, List[ParamGridType]]:
     """
     Removes combinations of affinity and linkage that are not possible.
 
@@ -665,7 +713,7 @@ def _process_paramgrid(paramgrid):
     ag_paramgrid_processed : list of dicts
         options for AgglomerativeClustering
     """
-    gm_keys = ["covariance_type", "n_components", "random_state"]
+    gm_keys = ["covariance_type", "n_components"]
     ag_keys = ["affinity", "linkage"]
     ag_params_processed = []
     paramgrid_processed = []
@@ -687,12 +735,24 @@ def _process_paramgrid(paramgrid):
             ag_params = {key: params[key] for key in ag_keys}
             if ag_params not in ag_params_processed:
                 ag_params_processed.append(ag_params)
+            if (
+                ag_params["affinity"] == "none"
+                and kmeans_n_init > 1
+                and label_init is None
+            ):
+                more_kmeans_init = gm_params.copy()
+                more_kmeans_init.update({"n_init": 1})
+                paramgrid_processed += [
+                    [{"affinity": "none", "linkage": "none"}, more_kmeans_init]
+                ] * (kmeans_n_init - 1)
 
             paramgrid_processed.append([ag_params, gm_params])
     return ag_params_processed, paramgrid_processed
 
 
-def _hierarchical_labels(children, min_components, max_components):
+def _hierarchical_labels(
+    children: np.ndarray, min_components: int, max_components: int
+) -> np.ndarray:
     n_samples = len(children) + 1
     hierarchical_labels = np.arange(n_samples).reshape((-1, 1))
     merge_start = n_samples - max_components - 1
@@ -702,9 +762,10 @@ def _hierarchical_labels(children, min_components, max_components):
         inds = np.where(np.isin(hierarchical_labels[:, n], children[n, :]))[0]
         hierarchical_labels[inds, -1] = n_samples + n
         if n < merge_end:
-            hierarchical_labels = np.hstack(
-                (hierarchical_labels, hierarchical_labels[:, -1].reshape((-1, 1)))
-            )
+            hierarchical_labels = np.hstack((
+                hierarchical_labels,
+                hierarchical_labels[:, -1].reshape((-1, 1)),
+            ))
 
     hierarchical_labels = hierarchical_labels[:, merge_start:]
     for i in range(hierarchical_labels.shape[1]):

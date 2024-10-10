@@ -1,8 +1,16 @@
-import numpy as np
-from ..match import GraphMatch as GMP
-from sklearn.base import BaseEstimator
 import itertools
 import warnings
+from typing import Any, Optional, Union
+
+import numpy as np
+from sklearn.base import BaseEstimator
+
+from graspologic.types import Dict, List
+
+from ..match import graph_match
+
+# Type aliases
+SeedsType = Union[np.ndarray, List[List[int]]]
 
 
 class VNviaSGM(BaseEstimator):
@@ -76,13 +84,15 @@ class VNviaSGM(BaseEstimator):
 
     """
 
+    nomination_list_: Optional[np.ndarray]
+
     def __init__(
         self,
-        order_voi_subgraph=1,
-        order_seeds_subgraph=1,
-        n_init=100,
-        max_nominations=None,
-        graph_match_kws={},
+        order_voi_subgraph: int = 1,
+        order_seeds_subgraph: int = 1,
+        n_init: int = 100,
+        max_nominations: Optional[int] = None,
+        graph_match_kws: Dict[str, Any] = {},
     ):
         if isinstance(order_voi_subgraph, int) and order_voi_subgraph > 0:
             self.order_voi_subgraph = order_voi_subgraph
@@ -115,7 +125,9 @@ class VNviaSGM(BaseEstimator):
             msg = '"graph_match_kws` must be type dict'
             raise ValueError(msg)
 
-    def fit(self, A, B, voi, seeds):
+    def fit(
+        self, A: np.ndarray, B: np.ndarray, voi: int, seeds: SeedsType
+    ) -> "VNviaSGM":
         """
         Fits the model to two graphs.
 
@@ -151,6 +163,15 @@ class VNviaSGM(BaseEstimator):
             raise ValueError(msg)
         elif A.shape[0] != A.shape[1] or B.shape[0] != B.shape[1]:
             msg = '"A" and "B" must be square'
+            raise ValueError(msg)
+        elif A.shape[0] > B.shape[0]:
+            # NOTE: the new graph_match function can absolutely handle the reverse case.
+            # However, it would require me to appropriately deal with the nodes of A
+            # which are not matched, and I dont have time to figure out what this class
+            # is doing right now. Further, I think with the old code using GraphMatch
+            # this would have raised a silent bug in this case, so I think this is
+            # at least an improvement.
+            msg = '"A" is larger than "B"; please reverse the ordering of these inputs.'
             raise ValueError(msg)
 
         if not isinstance(voi, int):
@@ -238,9 +259,7 @@ class VNviaSGM(BaseEstimator):
         if len(close_seeds) <= 0:
             warnings.warn(
                 'Voi {} was not a member of the induced subgraph A[{}], \
-                Try increasing "order_voi_subgraph"'.format(
-                    voi, seedsA
-                )
+                Try increasing "order_voi_subgraph"'.format(voi, seedsA)
             )
             self.n_seeds_ = None
             self.nomination_list_ = None
@@ -276,18 +295,17 @@ class VNviaSGM(BaseEstimator):
         # explanation
         self.n_seeds_ = len(close_seeds)
         seeds_fin = np.arange(self.n_seeds_)
+        partial_match = np.column_stack((seeds_fin, seeds_fin))
 
         # Call the SGM algorithm using user set parameters and generate a prob
         # vector for the voi.
-        sgm = GMP(
-            **self.graph_match_kws,
-        )
-
         prob_vector = np.zeros((max(SG_1.shape[0], SG_2.shape[0]) - self.n_seeds_))
 
         for ii in range(self.n_init):
-            sgm.fit(SG_1, SG_2, seeds_A=seeds_fin, seeds_B=seeds_fin)
-            prob_vector[sgm.perm_inds_[self.n_seeds_] - self.n_seeds_] += 1.0
+            _, perm_inds, _, _ = graph_match(
+                SG_1, SG_2, partial_match=partial_match, **self.graph_match_kws
+            )
+            prob_vector[perm_inds[self.n_seeds_] - self.n_seeds_] += 1.0
 
         prob_vector /= self.n_init
 
@@ -309,7 +327,9 @@ class VNviaSGM(BaseEstimator):
 
         return self
 
-    def fit_predict(self, A, B, voi, seeds):
+    def fit_predict(
+        self, A: np.ndarray, B: np.ndarray, voi: int, seeds: SeedsType
+    ) -> Optional[np.ndarray]:
         """
         Fits model to two adjacency matrices and returns nomination list
 
@@ -340,7 +360,9 @@ class VNviaSGM(BaseEstimator):
         return self.nomination_list_
 
 
-def _get_induced_subgraph(graph_adj_matrix, order, node, mindist=1):
+def _get_induced_subgraph(
+    graph_adj_matrix: np.ndarray, order: int, node: int, mindist: int = 1
+) -> np.ndarray:
     """
     Generates a vertex list for the induced subgraph about a node with
     max and min distance parameters.
@@ -366,7 +388,7 @@ def _get_induced_subgraph(graph_adj_matrix, order, node, mindist=1):
         The list containing all the vertices in the induced subgraph.
     """
     # Note all nodes are zero based in this implementation, i.e the first node is 0
-    dists = [[node]]
+    dists: List[Union[List[int], np.ndarray]] = [[node]]
     dists_conglom = [node]
     for ii in range(1, order + 1):
         clst = []
@@ -385,7 +407,9 @@ def _get_induced_subgraph(graph_adj_matrix, order, node, mindist=1):
     return np.unique(ress)
 
 
-def _get_induced_subgraph_list(graph_adj_matrix, order, node, mindist=1):
+def _get_induced_subgraph_list(
+    graph_adj_matrix: np.ndarray, order: int, node: int, mindist: int = 1
+) -> np.ndarray:
     """
     Generates a vertex list for the induced subgraph about a node with
     max and min distance parameters.

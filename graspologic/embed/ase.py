@@ -1,19 +1,11 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
-import warnings
-import numpy as np
-from sklearn.utils.validation import check_is_fitted
-import networkx as nx
+from typing import Any, Optional
 
-from .base import BaseSpectralEmbed
-from ..utils import (
-    import_graph,
-    is_fully_connected,
-    augment_diagonal,
-    pass_to_ranks,
-    is_unweighted,
-)
+from ..types import GraphRepresentation
+from ..utils import augment_diagonal
+from .base import BaseSpectralEmbed, SvdAlgorithmType
 
 
 class AdjacencySpectralEmbed(BaseSpectralEmbed):
@@ -23,7 +15,7 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
     The adjacency spectral embedding (ASE) is a k-dimensional Euclidean representation
     of the graph based on its adjacency matrix. It relies on an SVD to reduce
     the dimensionality to the specified k, or if k is unspecified, can find a number of
-    dimensions automatically (see :class:`~graspologic.embed.selectSVD`).
+    dimensions automatically (see :class:`~graspologic.embed.select_svd`).
 
     Read more in the `Adjacency Spectral Embedding Tutorial
     <https://microsoft.github.io/graspologic/tutorials/embedding/AdjacencySpectralEmbed.html>`_
@@ -48,7 +40,7 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
             :func:`sklearn.utils.extmath.randomized_svd`
         - 'full'
             Computes full svd using :func:`scipy.linalg.svd`
-            Does not support ``graph`` input of type scipy.sparse.csr_matrix
+            Does not support ``graph`` input of type scipy.sparse.csr_array
         - 'truncated'
             Computes truncated svd using :func:`scipy.sparse.linalg.svds`
 
@@ -70,14 +62,19 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
         to the ground truth.
 
     concat : bool, optional (default False)
-        If graph is directed, whether to concatenate left and right (out and in) latent positions along axis 1.
+        If graph is directed, whether to concatenate left and right (out and in) latent
+        positions along axis 1.
 
+    svd_seed : int or None (default ``None``)
+        Only applicable for ``algorithm="randomized"``; allows you to seed the
+        randomized svd solver for deterministic, albeit pseudo-randomized behavior.
 
 
     Attributes
     ----------
     n_features_in_: int
-        Number of features passed to the :func:`~graspologic.embed.AdjacencySpectralEmbed.fit` method.
+        Number of features passed to the
+        :func:`~graspologic.embed.AdjacencySpectralEmbed.fit` method.
     latent_left_ : array, shape (n_samples, n_components)
         Estimated left latent positions of the graph.
     latent_right_ : array, shape (n_samples, n_components), or None
@@ -88,7 +85,7 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
 
     See Also
     --------
-    graspologic.embed.selectSVD
+    graspologic.embed.select_svd
     graspologic.embed.select_dimension
 
     Notes
@@ -116,14 +113,15 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
 
     def __init__(
         self,
-        n_components=None,
-        n_elbows=2,
-        algorithm="randomized",
-        n_iter=5,
-        check_lcc=True,
-        diag_aug=True,
-        concat=False,
-    ):
+        n_components: Optional[int] = None,
+        n_elbows: Optional[int] = 2,
+        algorithm: SvdAlgorithmType = "randomized",
+        n_iter: int = 5,
+        check_lcc: bool = True,
+        diag_aug: bool = True,
+        concat: bool = False,
+        svd_seed: Optional[int] = None,
+    ) -> None:
         super().__init__(
             n_components=n_components,
             n_elbows=n_elbows,
@@ -131,6 +129,7 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
             n_iter=n_iter,
             check_lcc=check_lcc,
             concat=concat,
+            svd_seed=svd_seed,
         )
 
         if not isinstance(diag_aug, bool):
@@ -138,13 +137,19 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
         self.diag_aug = diag_aug
         self.is_fitted_ = False
 
-    def fit(self, graph, y=None):
+    def fit(
+        self,
+        graph: GraphRepresentation,
+        y: Optional[Any] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> "AdjacencySpectralEmbed":
         """
         Fit ASE model to input graph
 
         Parameters
         ----------
-        graph : array-like, scipy.sparse.csr_matrix, or networkx.Graph
+        graph : array-like, scipy.sparse.csr_array, or networkx.Graph
             Input graph to embed.
 
         y: Ignored
@@ -161,93 +166,23 @@ class AdjacencySpectralEmbed(BaseSpectralEmbed):
 
         self._reduce_dim(A)
 
-        # for out-of-sample
-        inv_eigs = np.diag(1 / self.singular_values_)
-        self._pinv_left = self.latent_left_ @ inv_eigs
-        if self.latent_right_ is not None:
-            self._pinv_right = self.latent_right_ @ inv_eigs
-
         self.is_fitted_ = True
+
         return self
 
-    def transform(self, X):
+    def _compute_oos_prediction(self, X, directed):  # type: ignore
         """
-        Obtain latent positions from an adjacency matrix or matrix of out-of-sample
-        vertices. For more details on transforming out-of-sample vertices, see the
-        :ref:`tutorials <embed_tutorials>`. For mathematical background, see [2].
-
+        Computes the out-of-sample latent position estimation.
         Parameters
         ----------
-        X : array-like or tuple, original shape or (n_oos_vertices, n_vertices).
-
-            The original fitted matrix ("graph" in fit) or new out-of-sample data.
-            If ``X`` is the original fitted matrix, returns a matrix close to
-            ``self.fit_transform(X)``.
-
-            If ``X`` is an out-of-sample matrix, n_oos_vertices is the number
-            of new vertices, and n_vertices is the number of vertices in the
-            original graph. If tuple, graph is directed and ``X[0]`` contains
-            edges from out-of-sample vertices to in-sample vertices.
-
+        X: np.ndarray
+            Input to do oos embedding on.
+        directed: bool
+            Indication if graph is directed or undirected
         Returns
         -------
-        array_like or tuple, shape (n_oos_vertices, n_components)
-        or (n_vertices, n_components).
-
-            Array of latent positions. Transforms the fitted matrix if it was passed
-            in.
-
-            If ``X`` is an array or tuple containing adjacency vectors corresponding to
-            new nodes, returns the estimated latent positions for the new out-of-sample
-            adjacency vectors.
-            If undirected, returns array.
-            If directed, returns ``(X_out, X_in)``, where ``X_out`` contains
-            latent positions corresponding to nodes with edges from out-of-sample
-            vertices to in-sample vertices.
-
-        Notes
-        -----
-        If the matrix was diagonally augmented (e.g., ``self.diag_aug`` was True), ``fit``
-        followed by ``transform`` will produce a slightly different matrix than
-        ``fit_transform``.
-
-        To get the original embedding, using ``fit_transform`` is recommended. In the
-        directed case, if A is the original in-sample adjacency matrix, the tuple
-        (A.T, A) will need to be passed to ``transform`` if you do not wish to use
-        ``fit_transform``.
+        out : array_like or tuple, shape
         """
-
-        # checks
-        check_is_fitted(self, "is_fitted_")
-        if isinstance(X, nx.classes.graph.Graph):
-            X = import_graph(X)
-        directed = self.latent_right_ is not None
-
-        # correct types?
-        if directed and not isinstance(X, tuple):
-            if X.shape[0] == X.shape[1]:  # in case original matrix was passed
-                msg = """A square matrix A was passed to ``transform`` in the directed case. 
-                If this was the original in-sample matrix, either use ``fit_transform`` 
-                or pass a tuple (A.T, A). If this was an out-of-sample matrix, directed
-                graphs require a tuple (X_out, X_in)."""
-                raise TypeError(msg)
-            else:
-                msg = "Directed graphs require a tuple (X_out, X_in) for out-of-sample transforms."
-                raise TypeError(msg)
-        if not directed and not isinstance(X, np.ndarray):
-            raise TypeError("Undirected graphs require array input")
-
-        # correct shape in y?
-        latent_rows = self.latent_left_.shape[0]
-        _X = X[0] if directed else X
-        X_cols = _X.shape[-1]
-        if _X.ndim > 2:
-            raise ValueError("out-of-sample vertex must be 1d or 2d")
-        if latent_rows != X_cols:
-            msg = "out-of-sample vertex must be shape (n_oos_vertices, n_vertices)"
-            raise ValueError(msg)
-
-        # workhorse code
         if not directed:
             return X @ self._pinv_left
         elif directed:

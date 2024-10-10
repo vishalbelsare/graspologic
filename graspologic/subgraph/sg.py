@@ -1,8 +1,12 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+from typing import Union
+
 import numpy as np
 from scipy.stats import fisher_exact
+
+from graspologic.types import List, Tuple
 
 
 class SignalSubgraph:
@@ -34,7 +38,7 @@ class SignalSubgraph:
 
     """
 
-    def __construct_contingency(self):
+    def __construct_contingency(self) -> None:
         nverts = np.shape(self.graphs)[0]
         out = np.zeros((nverts, nverts, 2, 2))
         rowsum1 = sum(self.labels)
@@ -46,7 +50,12 @@ class SignalSubgraph:
                 out[i, j, :, :] = [[a, rowsum0 - a], [b, rowsum1 - b]]
         self.contmat_ = out
 
-    def fit(self, graphs, labels, constraints):
+    def fit(
+        self,
+        graphs: np.ndarray,
+        labels: Union[List, np.ndarray],
+        constraints: Union[int, List],
+    ) -> "SignalSubgraph":
         """
         Fit the signal-subgraph estimator according to the constraints given.
 
@@ -104,20 +113,18 @@ class SignalSubgraph:
 
         self.__construct_contingency()
         verts = np.shape(self.graphs)[0]
-        sigmat = np.array(
-            [
-                [fisher_exact(self.contmat_[i, j, :, :])[1] for j in range(verts)]
-                for i in range(verts)
-            ]
-        )
+        sigmat = np.array([
+            [fisher_exact(self.contmat_[i, j, :, :])[1] for j in range(verts)]
+            for i in range(verts)
+        ])
 
         if isinstance(constraints, (int)):  # incoherent
             nedges = constraints
-            sigsub = np.dstack(
+            _sigsub_dstack = np.dstack(
                 np.unravel_index(np.argsort(sigmat.ravel()), np.shape(sigmat))
             )
-            sigsub = sigsub[0, :nedges, :]
-            sigsub = tuple(np.transpose(sigsub))
+            _sigsub = _sigsub_dstack[0, :nedges, :]
+            sigsub = tuple(np.transpose(_sigsub))
 
         elif len(constraints) == 2:  # coherent
             nedges = constraints[0]
@@ -147,13 +154,13 @@ class SignalSubgraph:
                     indsp = np.dstack(
                         np.unravel_index(np.argsort(blank.ravel()), np.shape(blank))
                     )
-                    sigsub = indsp[0, :nedges, :]
-                    sigsub = tuple(np.transpose(sigsub))
+                    _sigsub = indsp[0, :nedges, :]
+                    sigsub = tuple(np.transpose(_sigsub))
                     wconv = 1
                 else:
                     wcounter = wcounter + 1
                     if wcounter > len(wset):
-                        sigsub = []
+                        sigsub = tuple()
                         wconv = 1
         else:
             msg = "Input constraints must be an int for the incoherent signal-subgraph estimator, or a vector of length 2 for the coherent subgraph estimator."
@@ -161,7 +168,12 @@ class SignalSubgraph:
         self.sigsub_ = sigsub
         return self
 
-    def fit_transform(self, graphs, labels, constraints):
+    def fit_transform(
+        self,
+        graphs: np.ndarray,
+        labels: Union[List, np.ndarray],
+        constraints: Union[int, List],
+    ) -> Tuple:
         """
         A function to return the indices of the signal-subgraph. If ``return_mask`` is True, also returns a mask for the signal-subgraph.
 

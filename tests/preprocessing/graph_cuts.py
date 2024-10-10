@@ -2,13 +2,14 @@
 # Licensed under the MIT License.
 
 import unittest
-import numpy as np
+
 import networkx as nx
+import numpy as np
+from testfixtures import LogCapture
 
 from graspologic.preprocessing import graph_cuts
-from ..utils import data_file
 
-from testfixtures import LogCapture
+from ..utils import data_file
 
 
 def _get_florentine_graph():
@@ -216,13 +217,11 @@ class TestEdgeWeights(unittest.TestCase):
 
             # check logger is logging things correctly since it is an important part of this function
             # by proxy this also checks that edges_by_weight is called
-            log_capture.check(
-                (
-                    "graspologic.preprocessing.graph_cuts",
-                    "WARNING",
-                    "Graph contains 1 edges with no weight. Histogram excludes these values.",
-                )
-            )
+            log_capture.check((
+                "graspologic.preprocessing.graph_cuts",
+                "WARNING",
+                "Graph contains 1 edges with no weight. Histogram excludes these values.",
+            ))
 
     def test_make_cuts_larger_than_inclusive(self):
         graph = _get_toy_graph()

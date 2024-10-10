@@ -1,11 +1,13 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+from typing import Optional
+
 import numpy as np
 
-from .base import BaseEmbedMulti
-from .svd import select_dimension, selectSVD
 from ..utils import is_almost_symmetric
+from .base import BaseEmbedMulti
+from .svd import SvdAlgorithmType, select_dimension, select_svd
 
 
 class MultipleASE(BaseEmbedMulti):
@@ -70,6 +72,10 @@ class MultipleASE(BaseEmbedMulti):
         If graph(s) are directed, whether to concatenate each graph's left and right (out and in) latent positions
         along axis 1.
 
+    svd_seed : int or None (default ``None``)
+        Only applicable for ``algorithm="randomized"``; allows you to seed the
+        randomized svd solver for deterministic, albeit pseudo-randomized behavior.
+
 
     Attributes
     ----------
@@ -105,13 +111,14 @@ class MultipleASE(BaseEmbedMulti):
 
     def __init__(
         self,
-        n_components=None,
-        n_elbows=2,
-        algorithm="randomized",
-        n_iter=5,
-        scaled=True,
-        diag_aug=True,
-        concat=False,
+        n_components: Optional[int] = None,
+        n_elbows: Optional[int] = 2,
+        algorithm: SvdAlgorithmType = "randomized",
+        n_iter: int = 5,
+        scaled: bool = True,
+        diag_aug: bool = True,
+        concat: bool = False,
+        svd_seed: Optional[int] = None,
     ):
         if not isinstance(scaled, bool):
             msg = "scaled must be a boolean, not {}".format(scaled)
@@ -124,10 +131,11 @@ class MultipleASE(BaseEmbedMulti):
             n_iter=n_iter,
             diag_aug=diag_aug,
             concat=concat,
+            svd_seed=svd_seed,
         )
         self.scaled = scaled
 
-    def _reduce_dim(self, graphs):
+    def _reduce_dim(self, graphs):  # type: ignore
         if self.n_components is None:
             # first embed into log2(n_vertices) for each graph
             n_components = int(np.ceil(np.log2(np.min(self.n_vertices_))))
@@ -136,11 +144,12 @@ class MultipleASE(BaseEmbedMulti):
 
         # embed individual graphs
         embeddings = [
-            selectSVD(
+            select_svd(
                 graph,
                 n_components=n_components,
                 algorithm=self.algorithm,
                 n_iter=self.n_iter,
+                svd_seed=self.svd_seed,
             )
             for graph in graphs
         ]
@@ -163,47 +172,45 @@ class MultipleASE(BaseEmbedMulti):
             Vs = np.hstack([V.T[:, :best_dimension] for V in Vs])
         else:
             # Equivalent to ASE
-            Us = np.hstack(
-                [
-                    U[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
-                    for U, D in zip(Us, Ds)
-                ]
-            )
-            Vs = np.hstack(
-                [
-                    V.T[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
-                    for V, D in zip(Vs, Ds)
-                ]
-            )
+            Us = np.hstack([
+                U[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
+                for U, D in zip(Us, Ds)
+            ])
+            Vs = np.hstack([
+                V.T[:, :best_dimension] @ np.diag(np.sqrt(D[:best_dimension]))
+                for V, D in zip(Vs, Ds)
+            ])
 
         # Second SVD for vertices
         # The notation is slightly different than the paper
-        Uhat, sing_vals_left, _ = selectSVD(
+        Uhat, sing_vals_left, _ = select_svd(
             Us,
             n_components=self.n_components,
             n_elbows=self.n_elbows,
             algorithm=self.algorithm,
             n_iter=self.n_iter,
+            svd_seed=self.svd_seed,
         )
 
-        Vhat, sing_vals_right, _ = selectSVD(
+        Vhat, sing_vals_right, _ = select_svd(
             Vs,
             n_components=self.n_components,
             n_elbows=self.n_elbows,
             algorithm=self.algorithm,
             n_iter=self.n_iter,
+            svd_seed=self.svd_seed,
         )
         return Uhat, Vhat, sing_vals_left, sing_vals_right
 
-    def fit(self, graphs, y=None):
+    def fit(self, graphs, y=None):  # type: ignore
         """
         Fit the model with graphs.
 
         Parameters
         ----------
-        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_matrix
+        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_array
             If list of nx.Graph, each Graph must contain same number of nodes.
-            If list of ndarray or csr_matrix, each array must have shape (n_vertices, n_vertices).
+            If list of ndarray or csr_array, each array must have shape (n_vertices, n_vertices).
             If ndarray, then array must have shape (n_graphs, n_vertices, n_vertices).
 
         Returns
@@ -234,16 +241,16 @@ class MultipleASE(BaseEmbedMulti):
 
         return self
 
-    def fit_transform(self, graphs, y=None):
+    def fit_transform(self, graphs, y=None):  # type: ignore
         """
         Fit the model with graphs and apply the embedding on graphs.
         n_components is either automatically determined or based on user input.
 
         Parameters
         ----------
-        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_matrix
+        graphs : list of nx.Graph, ndarray or scipy.sparse.csr_array
             If list of nx.Graph, each Graph must contain same number of nodes.
-            If list of ndarray or csr_matrix, each array must have shape (n_vertices, n_vertices).
+            If list of ndarray or csr_array, each array must have shape (n_vertices, n_vertices).
             If ndarray, then array must have shape (n_graphs, n_vertices, n_vertices).
 
         Returns

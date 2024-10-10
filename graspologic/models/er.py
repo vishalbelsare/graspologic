@@ -1,9 +1,13 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
-from .sbm_estimators import SBMEstimator, DCSBMEstimator
-from ..utils import import_graph
+from typing import Any, Optional
+
 import numpy as np
+
+from ..types import GraphRepresentation
+from ..utils import import_graph
+from .sbm_estimators import DCSBMEstimator, SBMEstimator
 
 
 class EREstimator(SBMEstimator):
@@ -22,7 +26,7 @@ class EREstimator(SBMEstimator):
     Parameters
     ----------
     directed : boolean, optional (default=True)
-        Whether to treat the input graph as directed. Even if a directed graph is inupt,
+        Whether to treat the input graph as directed. Even if a directed graph is input,
         this determines whether to force symmetry upon the block probability matrix fit
         for the SBM. It will also determine whether graphs sampled from the model are
         directed.
@@ -52,17 +56,17 @@ class EREstimator(SBMEstimator):
     .. [1] https://en.wikipedia.org/wiki/Erd%C5%91s%E2%80%93R%C3%A9nyi_model
     """
 
-    def __init__(self, directed=True, loops=False):
+    def __init__(self, directed: bool = True, loops: bool = False):
         super().__init__(directed=directed, loops=loops)
 
-    def fit(self, graph, y=None):
+    def fit(self, graph: GraphRepresentation, y: Optional[Any] = None) -> "EREstimator":
         graph = import_graph(graph)
         er = super().fit(graph, y=np.ones(graph.shape[0]))
         self.p_ = er.block_p_[0, 0]
         delattr(self, "block_p_")
         return self
 
-    def _n_parameters(self):
+    def _n_parameters(self) -> int:
         n_parameters = 1  # p
         return n_parameters
 
@@ -83,7 +87,7 @@ class DCEREstimator(DCSBMEstimator):
     Parameters
     ----------
     directed : boolean, optional (default=True)
-        Whether to treat the input graph as directed. Even if a directed graph is inupt,
+        Whether to treat the input graph as directed. Even if a directed graph is input,
         this determines whether to force symmetry upon the block probability matrix fit
         for the SBM. It will also determine whether graphs sampled from the model are
         directed.
@@ -131,18 +135,22 @@ class DCEREstimator(DCSBMEstimator):
 
     """
 
-    def __init__(self, directed=True, loops=False, degree_directed=False):
+    def __init__(
+        self, directed: bool = True, loops: bool = False, degree_directed: bool = False
+    ):
         super().__init__(
             directed=directed, loops=loops, degree_directed=degree_directed
         )
 
-    def fit(self, graph, y=None):
+    def fit(
+        self, graph: GraphRepresentation, y: Optional[Any] = None
+    ) -> "DCEREstimator":
         dcer = super().fit(graph, y=np.ones(graph.shape[0]))
         self.p_ = dcer.block_p_[0, 0]
         delattr(self, "block_p_")
         return self
 
-    def _n_parameters(self):
+    def _n_parameters(self) -> int:
         n_parameters = 1  # p
         n_parameters += self.degree_corrections_.size
         return n_parameters

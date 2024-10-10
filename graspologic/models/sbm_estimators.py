@@ -1,11 +1,16 @@
 # Copyright (c) Microsoft Corporation and contributors.
 # Licensed under the MIT License.
 
+from typing import Any, Optional
+
 import numpy as np
 from sklearn.utils import check_X_y
 
+from graspologic.types import Dict, List, Tuple
+
 from ..cluster import GaussianCluster
 from ..embed import AdjacencySpectralEmbed, LaplacianSpectralEmbed
+from ..types import GraphRepresentation
 from ..utils import (
     augment_diagonal,
     cartesian_product,
@@ -17,7 +22,13 @@ from ..utils import (
 from .base import BaseGraphEstimator, _calculate_p
 
 
-def _check_common_inputs(n_components, min_comm, max_comm, cluster_kws, embed_kws):
+def _check_common_inputs(
+    n_components: Optional[int],
+    min_comm: int,
+    max_comm: int,
+    cluster_kws: Dict[str, Any],
+    embed_kws: Dict[str, Any],
+) -> None:
     if not isinstance(n_components, int) and n_components is not None:
         raise TypeError("n_components must be an int or None")
     elif n_components is not None and n_components < 1:
@@ -62,7 +73,7 @@ class SBMEstimator(BaseGraphEstimator):
     Parameters
     ----------
     directed : boolean, optional (default=True)
-        Whether to treat the input graph as directed. Even if a directed graph is inupt,
+        Whether to treat the input graph as directed. Even if a directed graph is input,
         this determines whether to force symmetry upon the block probability matrix fit
         for the SBM. It will also determine whether graphs sampled from the model are
         directed.
@@ -117,15 +128,18 @@ class SBMEstimator(BaseGraphEstimator):
             blockmodels: First steps. Social networks, 5(2), 109-137.
     """
 
+    block_p_: np.ndarray
+    vertex_assignments_: np.ndarray
+
     def __init__(
         self,
-        directed=True,
-        loops=False,
-        n_components=None,
-        min_comm=1,
-        max_comm=10,
-        cluster_kws={},
-        embed_kws={},
+        directed: bool = True,
+        loops: bool = False,
+        n_components: Optional[int] = None,
+        min_comm: int = 1,
+        max_comm: int = 10,
+        cluster_kws: Dict[str, Any] = {},
+        embed_kws: Dict[str, Any] = {},
     ):
         super().__init__(directed=directed, loops=loops)
 
@@ -137,7 +151,7 @@ class SBMEstimator(BaseGraphEstimator):
         self.max_comm = max_comm
         self.embed_kws = embed_kws
 
-    def _estimate_assignments(self, graph):
+    def _estimate_assignments(self, graph: GraphRepresentation) -> None:
         """
         Do some kind of clustering algorithm to estimate communities
 
@@ -152,12 +166,14 @@ class SBMEstimator(BaseGraphEstimator):
         gc = GaussianCluster(
             min_components=self.min_comm,
             max_components=self.max_comm,
-            **self.cluster_kws
+            **self.cluster_kws,
         )
-        vertex_assignments = gc.fit_predict(latent)
+        vertex_assignments = gc.fit_predict(latent)  # type: ignore
         self.vertex_assignments_ = vertex_assignments
 
-    def fit(self, graph, y=None):
+    def fit(
+        self, graph: GraphRepresentation, y: Optional[Any] = None
+    ) -> "SBMEstimator":
         """
         Fit the SBM to a graph, optionally with known block labels
 
@@ -193,7 +209,9 @@ class SBMEstimator(BaseGraphEstimator):
 
         if not self.loops:
             graph = remove_loops(graph)
-        block_p = _calculate_block_p(graph, block_inds, block_vert_inds)
+        block_p = _calculate_block_p(
+            graph, block_inds, block_vert_inds, loops=self.loops
+        )
 
         if not self.directed:
             block_p = symmetrize(block_p)
@@ -206,13 +224,13 @@ class SBMEstimator(BaseGraphEstimator):
 
         return self
 
-    def _n_parameters(self):
-        n_blocks = self.block_p_.shape[0]
+    def _n_parameters(self) -> int:
+        n_blocks: int = self.block_p_.shape[0]
         n_parameters = 0
         if self.directed:
-            n_parameters += n_blocks ** 2
+            n_parameters += n_blocks**2
         else:
-            n_parameters += n_blocks * (n_blocks + 1) / 2
+            n_parameters += int(n_blocks * (n_blocks + 1) / 2)
         if hasattr(self, "vertex_assignments_"):
             n_parameters += n_blocks - 1
         return n_parameters
@@ -250,7 +268,7 @@ class DCSBMEstimator(BaseGraphEstimator):
     Parameters
     ----------
     directed : boolean, optional (default=True)
-        Whether to treat the input graph as directed. Even if a directed graph is inupt,
+        Whether to treat the input graph as directed. Even if a directed graph is input,
         this determines whether to force symmetry upon the block probability matrix fit
         for the SBM. It will also determine whether graphs sampled from the model are
         directed.
@@ -325,14 +343,14 @@ class DCSBMEstimator(BaseGraphEstimator):
 
     def __init__(
         self,
-        degree_directed=False,
-        directed=True,
-        loops=False,
-        n_components=None,
-        min_comm=1,
-        max_comm=10,
-        cluster_kws={},
-        embed_kws={},
+        degree_directed: bool = False,
+        directed: bool = True,
+        loops: bool = False,
+        n_components: Optional[int] = None,
+        min_comm: int = 1,
+        max_comm: int = 10,
+        cluster_kws: Dict[str, Any] = {},
+        embed_kws: Dict[str, Any] = {},
     ):
         super().__init__(directed=directed, loops=loops)
         _check_common_inputs(n_components, min_comm, max_comm, cluster_kws, embed_kws)
@@ -347,7 +365,7 @@ class DCSBMEstimator(BaseGraphEstimator):
         self.max_comm = max_comm
         self.embed_kws = embed_kws
 
-    def _estimate_assignments(self, graph):
+    def _estimate_assignments(self, graph: GraphRepresentation) -> None:
         graph = symmetrize(graph, method="avg")  # TODO use directed LSE
         lse = LaplacianSpectralEmbed(
             form="R-DAD", n_components=self.n_components, **self.embed_kws
@@ -356,11 +374,13 @@ class DCSBMEstimator(BaseGraphEstimator):
         gc = GaussianCluster(
             min_components=self.min_comm,
             max_components=self.max_comm,
-            **self.cluster_kws
+            **self.cluster_kws,
         )
-        self.vertex_assignments_ = gc.fit_predict(latent)
+        self.vertex_assignments_ = gc.fit_predict(latent)  # type: ignore
 
-    def fit(self, graph, y=None):
+    def fit(
+        self, graph: GraphRepresentation, y: Optional[Any] = None
+    ) -> "DCSBMEstimator":
         """
         Fit the DCSBM to a graph, optionally with known block labels
 
@@ -391,7 +411,9 @@ class DCSBMEstimator(BaseGraphEstimator):
 
         if not self.loops:
             graph = graph - np.diag(np.diag(graph))
-        block_p = _calculate_block_p(graph, block_inds, block_vert_inds)
+        block_p = _calculate_block_p(
+            graph, block_inds, block_vert_inds, loops=self.loops
+        )
 
         out_degree = np.count_nonzero(graph, axis=1).astype(float)
         in_degree = np.count_nonzero(graph, axis=0).astype(float)
@@ -418,31 +440,35 @@ class DCSBMEstimator(BaseGraphEstimator):
         p_mat = p_mat * np.outer(degree_corrections[:, 0], degree_corrections[:, -1])
 
         if not self.loops:
-            p_mat -= np.diag(np.diag(p_mat))
+            # there seems to be a bug in numpy around __isub__ here?
+            p_mat -= np.diag(np.diag(p_mat))  # type: ignore
         self.p_mat_ = p_mat
         self.block_p_ = block_p
         return self
 
-    def _n_parameters(self):
-        n_blocks = self.block_p_.shape[0]
+    def _n_parameters(self) -> int:
+        n_blocks: int = self.block_p_.shape[0]
         n_parameters = 0
         if self.directed:
-            n_parameters += n_blocks ** 2  # B matrix
+            n_parameters += n_blocks**2  # B matrix
         else:
-            n_parameters += n_blocks * (n_blocks + 1) / 2  # Undirected B matrix
+            n_parameters += int(n_blocks * (n_blocks + 1) / 2)  # Undirected B matrix
         if hasattr(self, "vertex_assignments_"):
             n_parameters += n_blocks - 1
         n_parameters += self.degree_corrections_.size
         return n_parameters
 
 
-def _get_block_indices(y):
+def _get_block_indices(y: np.ndarray) -> Tuple[List[np.ndarray], range, np.ndarray]:
     """
     y is a length n_verts vector of labels
 
     returns a length n_verts vector in the same order as the input
     indicates which block each node is
     """
+    block_labels: np.ndarray
+    block_inv: np.ndarray
+    block_sizes: np.ndarray
     block_labels, block_inv, block_sizes = np.unique(
         y, return_inverse=True, return_counts=True
     )
@@ -458,16 +484,23 @@ def _get_block_indices(y):
     return block_vert_inds, block_inds, block_inv
 
 
-def _calculate_block_p(graph, block_inds, block_vert_inds, return_counts=False):
+def _calculate_block_p(
+    graph: np.ndarray,
+    block_inds: range,
+    block_vert_inds: List[np.ndarray],
+    return_counts: bool = False,
+    loops: bool = False,
+) -> np.ndarray:
     """
     graph : input n x n graph
     block_inds : list of length n_communities
     block_vert_inds : list of list, for each block index, gives every node in that block
     return_counts : whether to calculate counts rather than proportions
+    loops : whether self loops are possible in the graph
     """
 
     n_blocks = len(block_inds)
-    block_pairs = cartesian_product(block_inds, block_inds)
+    block_pairs = cartesian_product(np.array(block_inds), np.array(block_inds))
     block_p = np.zeros((n_blocks, n_blocks))
 
     for p in block_pairs:
@@ -476,6 +509,10 @@ def _calculate_block_p(graph, block_inds, block_vert_inds, return_counts=False):
         from_inds = block_vert_inds[from_block]
         to_inds = block_vert_inds[to_block]
         block = graph[from_inds, :][:, to_inds]
+        # if a block is from a community to itself, self loops are possible, so remove
+        # them from the computation to avoid underbias
+        if from_block == to_block and not loops:
+            block = block[~np.eye(block.shape[0], dtype=bool)]
         if return_counts:
             p = np.count_nonzero(block)
         else:
@@ -484,7 +521,9 @@ def _calculate_block_p(graph, block_inds, block_vert_inds, return_counts=False):
     return block_p
 
 
-def _block_to_full(block_mat, inverse, shape):
+def _block_to_full(
+    block_mat: np.ndarray, inverse: np.ndarray, shape: Tuple[int, ...]
+) -> np.ndarray:
     """
     "blows up" a k x k matrix, where k is the number of communities,
     into a full n x n probability matrix
